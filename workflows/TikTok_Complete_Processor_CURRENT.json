@@ -1,0 +1,719 @@
+{
+    "updatedAt": "2025-12-18T05:16:43.255Z",
+    "createdAt": "2025-12-17T18:14:09.585Z",
+    "id": "jwb1PoXYuYP2a37M",
+    "name": "TikTok Video Complete Processor",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "analyze-video-complete",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "webhook-main",
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                240,
+                208
+            ],
+            "webhookId": "analyze-video-complete"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://royhen.app.n8n.cloud/webhook/process-video-nocode",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ video_url: $json.body.video_url }) }}",
+                "options": {}
+            },
+            "id": "get-video-info",
+            "name": "Get Video Info",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                464,
+                208
+            ]
+        },
+        {
+            "parameters": {
+                "url": "={{ $json.video_download_url }}",
+                "options": {
+                    "response": {
+                        "response": {
+                            "responseFormat": "file"
+                        }
+                    }
+                }
+            },
+            "id": "download-video",
+            "name": "Download Video",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                688,
+                304
+            ]
+        },
+        {
+            "parameters": {
+                "name": "={{ $('Get Video Info').item.json.author + '_' + $('Get Video Info').item.json.video_id + '.mp4' }}",
+                "driveId": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "My Drive"
+                },
+                "folderId": {
+                    "__rl": true,
+                    "value": "root",
+                    "mode": "list"
+                },
+                "options": {}
+            },
+            "id": "upload-to-drive",
+            "name": "Upload to Google Drive",
+            "type": "n8n-nodes-base.googleDrive",
+            "typeVersion": 3,
+            "position": [
+                912,
+                400
+            ],
+            "credentials": {
+                "googleDriveOAuth2Api": {
+                    "id": "ofFKlLc4IoxLD68F",
+                    "name": "Google Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "resource": "audio",
+                "operation": "transcribe",
+                "options": {}
+            },
+            "id": "transcribe-audio",
+            "name": "Transcribe Audio",
+            "type": "@n8n/n8n-nodes-langchain.openAi",
+            "typeVersion": 1.6,
+            "position": [
+                912,
+                208
+            ],
+            "credentials": {
+                "openAiApi": {
+                    "id": "p4lXz4PI3LIye0EB",
+                    "name": "OpenAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "mode": "combine",
+                "combineBy": "combineByPosition",
+                "numberInputs": 3,
+                "options": {}
+            },
+            "id": "merge-all",
+            "name": "Merge All",
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3,
+            "position": [
+                1184,
+                192
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.openai.com/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "openAiApi",
+                "sendBody": true,
+                "specifyBody": "=={{ {\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a metadata generator for TikTok videos. Generate:\\n1. Title: 50-100 characters, descriptive, specific, keyword-rich, covering BOTH visual and spoken content\\n2. Description: 2-3 sentences covering visual AND transcribed audio content\\n3. Tags: 5+ tags covering topic, style, mood, format, purpose. NO audience tags like 'viral', 'trending', 'popular'. Focus on content descriptors.\\n\\nReturn ONLY valid JSON with fields: title, description, tags (array)\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Visual Analysis: \" + $json.choices[0].message.content + \"\\n\\nTranscription: \" + ($json.text || \"No spoken words detected\") + \"\\n\\nGenerate metadata for this video.\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" },\n  \"max_tokens\": 400\n} }}\n",
+                "bodyParameters": {
+                    "parameters": [
+                        {}
+                    ]
+                },
+                "options": {}
+            },
+            "id": "generate-metadata",
+            "name": "Generate Metadata",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1360,
+                208
+            ],
+            "credentials": {
+                "openAiApi": {
+                    "id": "p4lXz4PI3LIye0EB",
+                    "name": "OpenAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const videoInfo = $('Get Video Info').item.json;\nconst visualAnalysis = $('Visual Analysis').item.json.choices[0].message.content;\nconst transcription = $('Transcribe Audio').item.json.text;\nconst metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\nconst googleDrive = $('Upload to Google Drive').item.json;\n\nreturn {\n  json: {\n    title: metadata.title,\n    description: metadata.description,\n    tags: metadata.tags,\n    transcription: transcription,\n    video_url: videoInfo.video_url,\n    video_id: videoInfo.video_id,\n    author: videoInfo.author,\n    duration: videoInfo.duration,\n    music: { title: videoInfo.music_title, artist: videoInfo.music_author },\n    visual_analysis: visualAnalysis,\n    google_drive: {\n      file_id: googleDrive.id,\n      file_name: googleDrive.name,\n      file_url: googleDrive.webViewLink || 'N/A'\n    },\n    processed_at: new Date().toISOString()\n  }\n};"
+            },
+            "id": "format-output",
+            "name": "Format Final Output",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1584,
+                208
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {}
+            },
+            "id": "respond-webhook",
+            "name": "Respond to Webhook",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                1808,
+                208
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.openai.com/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "openAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Analyze this TikTok video cover image. Provide detailed analysis covering:\\n1. Visual elements (people, objects, setting, colors, composition)\\n2. Style and mood (aesthetic, tone, atmosphere)\\n3. Any visible text or graphics\\n4. Overall impression and theme\\n\\nBe specific and detailed.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{ $('Get Video Info').item.json.cover_url }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 500\n}",
+                "options": {}
+            },
+            "id": "visual-analysis",
+            "name": "Visual Analysis",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                912,
+                16
+            ],
+            "credentials": {
+                "openAiApi": {
+                    "id": "p4lXz4PI3LIye0EB",
+                    "name": "OpenAi account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Get Video Info",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Video Info": {
+            "main": [
+                [
+                    {
+                        "node": "Download Video",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Visual Analysis",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Download Video": {
+            "main": [
+                [
+                    {
+                        "node": "Upload to Google Drive",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Transcribe Audio",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Upload to Google Drive": {
+            "main": [
+                [
+                    {
+                        "node": "Merge All",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Transcribe Audio": {
+            "main": [
+                [
+                    {
+                        "node": "Merge All",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Merge All": {
+            "main": [
+                [
+                    {
+                        "node": "Generate Metadata",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Metadata": {
+            "main": [
+                [
+                    {
+                        "node": "Format Final Output",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Final Output": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Visual Analysis": {
+            "main": [
+                [
+                    {
+                        "node": "Merge All",
+                        "type": "main",
+                        "index": 2
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": {},
+    "versionId": "c5ea0dd1-0481-4345-bc0d-1586025a44ad",
+    "activeVersionId": "c5ea0dd1-0481-4345-bc0d-1586025a44ad",
+    "versionCounter": 34,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2025-12-17T18:14:09.588Z",
+            "createdAt": "2025-12-17T18:14:09.588Z",
+            "role": "workflow:owner",
+            "workflowId": "jwb1PoXYuYP2a37M",
+            "projectId": "WLfVoGEbhM21aKQc",
+            "project": {
+                "updatedAt": "2025-08-06T04:23:31.392Z",
+                "createdAt": "2025-08-06T04:23:26.059Z",
+                "id": "WLfVoGEbhM21aKQc",
+                "name": "Roy Hen Engel <royhenengel@gmail.com>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "projectRelations": [
+                    {
+                        "updatedAt": "2025-08-06T04:23:26.060Z",
+                        "createdAt": "2025-08-06T04:23:26.060Z",
+                        "userId": "cc527931-acd6-4a2e-a333-4c92a84e898d",
+                        "projectId": "WLfVoGEbhM21aKQc",
+                        "user": {
+                            "updatedAt": "2025-12-18T04:56:19.000Z",
+                            "createdAt": "2025-08-06T04:23:24.660Z",
+                            "id": "cc527931-acd6-4a2e-a333-4c92a84e898d",
+                            "email": "royhenengel@gmail.com",
+                            "firstName": "Roy",
+                            "lastName": "Hen Engel",
+                            "personalizationAnswers": null,
+                            "settings": {
+                                "userActivated": true,
+                                "easyAIWorkflowOnboarded": true,
+                                "firstSuccessfulWorkflowId": "AbZxkqnDDoKqTpAp",
+                                "userActivatedAt": 1754984654331,
+                                "npsSurvey": {
+                                    "waitingForResponse": true,
+                                    "ignoredCount": 1,
+                                    "lastShownAt": 1765361293914
+                                }
+                            },
+                            "disabled": false,
+                            "mfaEnabled": false,
+                            "lastActiveAt": "2025-12-17",
+                            "isPending": false
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2025-12-18T05:16:43.256Z",
+        "createdAt": "2025-12-18T05:16:43.256Z",
+        "versionId": "c5ea0dd1-0481-4345-bc0d-1586025a44ad",
+        "workflowId": "jwb1PoXYuYP2a37M",
+        "nodes": [
+            {
+                "parameters": {
+                    "httpMethod": "POST",
+                    "path": "analyze-video-complete",
+                    "responseMode": "responseNode",
+                    "options": {}
+                },
+                "id": "webhook-main",
+                "name": "Webhook",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2,
+                "position": [
+                    240,
+                    208
+                ],
+                "webhookId": "analyze-video-complete"
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://royhen.app.n8n.cloud/webhook/process-video-nocode",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({ video_url: $json.body.video_url }) }}",
+                    "options": {}
+                },
+                "id": "get-video-info",
+                "name": "Get Video Info",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    464,
+                    208
+                ]
+            },
+            {
+                "parameters": {
+                    "url": "={{ $json.video_download_url }}",
+                    "options": {
+                        "response": {
+                            "response": {
+                                "responseFormat": "file"
+                            }
+                        }
+                    }
+                },
+                "id": "download-video",
+                "name": "Download Video",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    688,
+                    304
+                ]
+            },
+            {
+                "parameters": {
+                    "name": "={{ $('Get Video Info').item.json.author + '_' + $('Get Video Info').item.json.video_id + '.mp4' }}",
+                    "driveId": {
+                        "__rl": true,
+                        "mode": "list",
+                        "value": "My Drive"
+                    },
+                    "folderId": {
+                        "__rl": true,
+                        "value": "root",
+                        "mode": "list"
+                    },
+                    "options": {}
+                },
+                "id": "upload-to-drive",
+                "name": "Upload to Google Drive",
+                "type": "n8n-nodes-base.googleDrive",
+                "typeVersion": 3,
+                "position": [
+                    912,
+                    400
+                ],
+                "credentials": {
+                    "googleDriveOAuth2Api": {
+                        "id": "ofFKlLc4IoxLD68F",
+                        "name": "Google Account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "resource": "audio",
+                    "operation": "transcribe",
+                    "options": {}
+                },
+                "id": "transcribe-audio",
+                "name": "Transcribe Audio",
+                "type": "@n8n/n8n-nodes-langchain.openAi",
+                "typeVersion": 1.6,
+                "position": [
+                    912,
+                    208
+                ],
+                "credentials": {
+                    "openAiApi": {
+                        "id": "p4lXz4PI3LIye0EB",
+                        "name": "OpenAi account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "mode": "combine",
+                    "combineBy": "combineByPosition",
+                    "numberInputs": 3,
+                    "options": {}
+                },
+                "id": "merge-all",
+                "name": "Merge All",
+                "type": "n8n-nodes-base.merge",
+                "typeVersion": 3,
+                "position": [
+                    1184,
+                    192
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://api.openai.com/v1/chat/completions",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "openAiApi",
+                    "sendBody": true,
+                    "specifyBody": "=={{ {\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a metadata generator for TikTok videos. Generate:\\n1. Title: 50-100 characters, descriptive, specific, keyword-rich, covering BOTH visual and spoken content\\n2. Description: 2-3 sentences covering visual AND transcribed audio content\\n3. Tags: 5+ tags covering topic, style, mood, format, purpose. NO audience tags like 'viral', 'trending', 'popular'. Focus on content descriptors.\\n\\nReturn ONLY valid JSON with fields: title, description, tags (array)\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Visual Analysis: \" + $json.choices[0].message.content + \"\\n\\nTranscription: \" + ($json.text || \"No spoken words detected\") + \"\\n\\nGenerate metadata for this video.\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" },\n  \"max_tokens\": 400\n} }}\n",
+                    "bodyParameters": {
+                        "parameters": [
+                            {}
+                        ]
+                    },
+                    "options": {}
+                },
+                "id": "generate-metadata",
+                "name": "Generate Metadata",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1360,
+                    208
+                ],
+                "credentials": {
+                    "openAiApi": {
+                        "id": "p4lXz4PI3LIye0EB",
+                        "name": "OpenAi account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "jsCode": "const videoInfo = $('Get Video Info').item.json;\nconst visualAnalysis = $('Visual Analysis').item.json.choices[0].message.content;\nconst transcription = $('Transcribe Audio').item.json.text;\nconst metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\nconst googleDrive = $('Upload to Google Drive').item.json;\n\nreturn {\n  json: {\n    title: metadata.title,\n    description: metadata.description,\n    tags: metadata.tags,\n    transcription: transcription,\n    video_url: videoInfo.video_url,\n    video_id: videoInfo.video_id,\n    author: videoInfo.author,\n    duration: videoInfo.duration,\n    music: { title: videoInfo.music_title, artist: videoInfo.music_author },\n    visual_analysis: visualAnalysis,\n    google_drive: {\n      file_id: googleDrive.id,\n      file_name: googleDrive.name,\n      file_url: googleDrive.webViewLink || 'N/A'\n    },\n    processed_at: new Date().toISOString()\n  }\n};"
+                },
+                "id": "format-output",
+                "name": "Format Final Output",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    1584,
+                    208
+                ]
+            },
+            {
+                "parameters": {
+                    "respondWith": "json",
+                    "responseBody": "={{ $json }}",
+                    "options": {}
+                },
+                "id": "respond-webhook",
+                "name": "Respond to Webhook",
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1,
+                "position": [
+                    1808,
+                    208
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://api.openai.com/v1/chat/completions",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "openAiApi",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Analyze this TikTok video cover image. Provide detailed analysis covering:\\n1. Visual elements (people, objects, setting, colors, composition)\\n2. Style and mood (aesthetic, tone, atmosphere)\\n3. Any visible text or graphics\\n4. Overall impression and theme\\n\\nBe specific and detailed.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{ $('Get Video Info').item.json.cover_url }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 500\n}",
+                    "options": {}
+                },
+                "id": "visual-analysis",
+                "name": "Visual Analysis",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    912,
+                    16
+                ],
+                "credentials": {
+                    "openAiApi": {
+                        "id": "p4lXz4PI3LIye0EB",
+                        "name": "OpenAi account"
+                    }
+                }
+            }
+        ],
+        "connections": {
+            "Webhook": {
+                "main": [
+                    [
+                        {
+                            "node": "Get Video Info",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Get Video Info": {
+                "main": [
+                    [
+                        {
+                            "node": "Download Video",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Visual Analysis",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Download Video": {
+                "main": [
+                    [
+                        {
+                            "node": "Upload to Google Drive",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Transcribe Audio",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Upload to Google Drive": {
+                "main": [
+                    [
+                        {
+                            "node": "Merge All",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Transcribe Audio": {
+                "main": [
+                    [
+                        {
+                            "node": "Merge All",
+                            "type": "main",
+                            "index": 1
+                        }
+                    ]
+                ]
+            },
+            "Merge All": {
+                "main": [
+                    [
+                        {
+                            "node": "Generate Metadata",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Generate Metadata": {
+                "main": [
+                    [
+                        {
+                            "node": "Format Final Output",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Format Final Output": {
+                "main": [
+                    [
+                        {
+                            "node": "Respond to Webhook",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Visual Analysis": {
+                "main": [
+                    [
+                        {
+                            "node": "Merge All",
+                            "type": "main",
+                            "index": 2
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Roy Hen Engel",
+        "name": null,
+        "description": null
+    }
+}

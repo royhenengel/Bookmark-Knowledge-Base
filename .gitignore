@@ -1,0 +1,45 @@
+# Environment files
+.env
+.env.local
+
+# Videos and outputs
+videos/
+output/
+*.mp4
+*.mov
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+
+# Temporary files
+/tmp/
+*.tmp
+*.bak
+
+# Credentials and sensitive data
+*credentials*.json
+*secret*.json
+*token*.txt

@@ -1,0 +1,413 @@
+{
+    "updatedAt": "2025-12-17T05:57:11.794Z",
+    "createdAt": "2025-12-17T05:40:16.250Z",
+    "id": "YIreQfG1Uk8xa7KU",
+    "name": "TikTok Video Info - No Code Node",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "process-video-nocode",
+                "responseMode": "lastNode",
+                "options": {}
+            },
+            "id": "a068fdf6-3a71-47a6-a4d0-0d27da8f1a76",
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1.1,
+            "position": [
+                176,
+                -64
+            ],
+            "webhookId": "f298af11-e1aa-4258-b1be-b3debf08ee8c"
+        },
+        {
+            "parameters": {
+                "url": "https://tiktok-video-no-watermark2.p.rapidapi.com",
+                "sendQuery": true,
+                "queryParameters": {
+                    "parameters": [
+                        {
+                            "name": "url",
+                            "value": "={{ $json.body.video_url }}"
+                        },
+                        {
+                            "name": "hd",
+                            "value": "1"
+                        }
+                    ]
+                },
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "X-RapidAPI-Key",
+                            "value": "884a3146bfmsh62db44df12afa3ap1128d5jsn232683fd49f1"
+                        },
+                        {
+                            "name": "X-RapidAPI-Host",
+                            "value": "tiktok-video-no-watermark2.p.rapidapi.com"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "d370142a-aaf9-4ec2-be5e-7542d8728481",
+            "name": "Get TikTok Video Info",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                400,
+                -64
+            ]
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "video_url",
+                            "name": "video_url",
+                            "value": "={{ $(\"Webhook\").item.json.body.video_url }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "video_id",
+                            "name": "video_id",
+                            "value": "={{ $json.data.id }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "video_play_url",
+                            "name": "video_play_url",
+                            "value": "={{ $json.data.play }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "video_download_url",
+                            "name": "video_download_url",
+                            "value": "={{ $json.data.hdplay || $json.data.play }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "audio_url",
+                            "name": "audio_url",
+                            "value": "={{ $json.data.music }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "cover_url",
+                            "name": "cover_url",
+                            "value": "={{ $json.data.cover }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "author",
+                            "name": "author",
+                            "value": "={{ $json.data.author.unique_id }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "title",
+                            "name": "title",
+                            "value": "={{ $json.data.title }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "duration",
+                            "name": "duration",
+                            "value": "={{ $json.data.duration }}",
+                            "type": "number"
+                        },
+                        {
+                            "id": "music_title",
+                            "name": "music_title",
+                            "value": "={{ $json.data.music_info.title }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "music_author",
+                            "name": "music_author",
+                            "value": "={{ $json.data.music_info.author }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "f019f6f1-e756-44c9-9139-ca35cf64874c",
+            "name": "Extract Video Data",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                624,
+                -64
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Get TikTok Video Info",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get TikTok Video Info": {
+            "main": [
+                [
+                    {
+                        "node": "Extract Video Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": {},
+    "versionId": "8c4bdb3c-bbeb-4ec7-b76e-b992c281dde7",
+    "activeVersionId": "8c4bdb3c-bbeb-4ec7-b76e-b992c281dde7",
+    "versionCounter": 7,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2025-12-17T05:40:16.254Z",
+            "createdAt": "2025-12-17T05:40:16.254Z",
+            "role": "workflow:owner",
+            "workflowId": "YIreQfG1Uk8xa7KU",
+            "projectId": "WLfVoGEbhM21aKQc",
+            "project": {
+                "updatedAt": "2025-08-06T04:23:31.392Z",
+                "createdAt": "2025-08-06T04:23:26.059Z",
+                "id": "WLfVoGEbhM21aKQc",
+                "name": "Roy Hen Engel <royhenengel@gmail.com>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "projectRelations": [
+                    {
+                        "updatedAt": "2025-08-06T04:23:26.060Z",
+                        "createdAt": "2025-08-06T04:23:26.060Z",
+                        "userId": "cc527931-acd6-4a2e-a333-4c92a84e898d",
+                        "projectId": "WLfVoGEbhM21aKQc",
+                        "user": {
+                            "updatedAt": "2025-12-18T04:56:19.000Z",
+                            "createdAt": "2025-08-06T04:23:24.660Z",
+                            "id": "cc527931-acd6-4a2e-a333-4c92a84e898d",
+                            "email": "royhenengel@gmail.com",
+                            "firstName": "Roy",
+                            "lastName": "Hen Engel",
+                            "personalizationAnswers": null,
+                            "settings": {
+                                "userActivated": true,
+                                "easyAIWorkflowOnboarded": true,
+                                "firstSuccessfulWorkflowId": "AbZxkqnDDoKqTpAp",
+                                "userActivatedAt": 1754984654331,
+                                "npsSurvey": {
+                                    "waitingForResponse": true,
+                                    "ignoredCount": 1,
+                                    "lastShownAt": 1765361293914
+                                }
+                            },
+                            "disabled": false,
+                            "mfaEnabled": false,
+                            "lastActiveAt": "2025-12-17",
+                            "isPending": false
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2025-12-17T05:57:11.795Z",
+        "createdAt": "2025-12-17T05:57:11.795Z",
+        "versionId": "8c4bdb3c-bbeb-4ec7-b76e-b992c281dde7",
+        "workflowId": "YIreQfG1Uk8xa7KU",
+        "nodes": [
+            {
+                "parameters": {
+                    "httpMethod": "POST",
+                    "path": "process-video-nocode",
+                    "responseMode": "lastNode",
+                    "options": {}
+                },
+                "id": "a068fdf6-3a71-47a6-a4d0-0d27da8f1a76",
+                "name": "Webhook",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 1.1,
+                "position": [
+                    176,
+                    -64
+                ],
+                "webhookId": "f298af11-e1aa-4258-b1be-b3debf08ee8c"
+            },
+            {
+                "parameters": {
+                    "url": "https://tiktok-video-no-watermark2.p.rapidapi.com",
+                    "sendQuery": true,
+                    "queryParameters": {
+                        "parameters": [
+                            {
+                                "name": "url",
+                                "value": "={{ $json.body.video_url }}"
+                            },
+                            {
+                                "name": "hd",
+                                "value": "1"
+                            }
+                        ]
+                    },
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "X-RapidAPI-Key",
+                                "value": "884a3146bfmsh62db44df12afa3ap1128d5jsn232683fd49f1"
+                            },
+                            {
+                                "name": "X-RapidAPI-Host",
+                                "value": "tiktok-video-no-watermark2.p.rapidapi.com"
+                            }
+                        ]
+                    },
+                    "options": {}
+                },
+                "id": "d370142a-aaf9-4ec2-be5e-7542d8728481",
+                "name": "Get TikTok Video Info",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    400,
+                    -64
+                ]
+            },
+            {
+                "parameters": {
+                    "assignments": {
+                        "assignments": [
+                            {
+                                "id": "video_url",
+                                "name": "video_url",
+                                "value": "={{ $(\"Webhook\").item.json.body.video_url }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "video_id",
+                                "name": "video_id",
+                                "value": "={{ $json.data.id }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "video_play_url",
+                                "name": "video_play_url",
+                                "value": "={{ $json.data.play }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "video_download_url",
+                                "name": "video_download_url",
+                                "value": "={{ $json.data.hdplay || $json.data.play }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "audio_url",
+                                "name": "audio_url",
+                                "value": "={{ $json.data.music }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "cover_url",
+                                "name": "cover_url",
+                                "value": "={{ $json.data.cover }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "author",
+                                "name": "author",
+                                "value": "={{ $json.data.author.unique_id }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "title",
+                                "name": "title",
+                                "value": "={{ $json.data.title }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "duration",
+                                "name": "duration",
+                                "value": "={{ $json.data.duration }}",
+                                "type": "number"
+                            },
+                            {
+                                "id": "music_title",
+                                "name": "music_title",
+                                "value": "={{ $json.data.music_info.title }}",
+                                "type": "string"
+                            },
+                            {
+                                "id": "music_author",
+                                "name": "music_author",
+                                "value": "={{ $json.data.music_info.author }}",
+                                "type": "string"
+                            }
+                        ]
+                    },
+                    "options": {}
+                },
+                "id": "f019f6f1-e756-44c9-9139-ca35cf64874c",
+                "name": "Extract Video Data",
+                "type": "n8n-nodes-base.set",
+                "typeVersion": 3.4,
+                "position": [
+                    624,
+                    -64
+                ]
+            }
+        ],
+        "connections": {
+            "Webhook": {
+                "main": [
+                    [
+                        {
+                            "node": "Get TikTok Video Info",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Get TikTok Video Info": {
+                "main": [
+                    [
+                        {
+                            "node": "Extract Video Data",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Roy Hen Engel",
+        "name": null,
+        "description": null
+    }
+}
