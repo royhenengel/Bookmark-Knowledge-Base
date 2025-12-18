@@ -11,20 +11,19 @@ This project processes TikTok videos to generate comprehensive metadata includin
 - **Smart Titles** (50-100 characters, SEO-optimized)
 - **Content Tags** (topic, style, mood, format, purpose)
 - **Rich Descriptions** (covering visual and audio content)
-- **Audio Transcriptions** (via OpenAI Whisper)
+- **Audio Transcriptions** (via AssemblyAI)
 - **Visual Analysis** (via GPT-4 Vision)
 - **Google Drive Storage** (organized video library)
 
-**Processing Time:** ~25-30 seconds per video
-**Cost:** ~$0.017 per video (target: <$0.06)
+**Processing Time:** ~20-25 seconds per video
+**Cost:** ~$0.012 per video (target: <$0.06)
 
 ## Features
 
 ### ✅ Working
 - End-to-end video processing via n8n workflows
 - GPT-4 Vision analysis of video cover images
-- OpenAI Whisper audio transcription
-- **CloudConvert audio extraction** (handles videos >25MB)
+- **AssemblyAI audio transcription** (96% accuracy, no file limits, faster)
 - Automated Google Drive uploads
 - GPT-4 Mini metadata generation
 - Structured JSON output
@@ -48,9 +47,9 @@ Get Video Info (sub-workflow)
     ↓
 [Visual Analysis (GPT-4) + Download Video]
     ↓
-Upload to Google Drive + CloudConvert Audio Extract
+Upload to Google Drive + Upload to AssemblyAI
     ↓
-Transcribe Audio (Whisper) ← MP3 from CloudConvert
+Submit Transcription → Wait 10s → Get Transcription
     ↓
 Merge Results (3 inputs)
     ↓
@@ -66,7 +65,7 @@ Format & Return JSON
   "title": "Playful Pomeranian Enjoys a Relaxing Day on a Boat | Serene Sea Adventure",
   "description": "Watch this adorable Pomeranian as it joyfully lounges on a boat deck...",
   "tags": ["dogs", "Pomeranian", "boat", "relaxation", "outdoor adventure"],
-  "transcription": "Full Whisper transcription of spoken content...",
+  "transcription": "Full AssemblyAI transcription of spoken content...",
   "video_url": "https://www.tiktok.com/@username/video/123456",
   "video_id": "123456",
   "author": "username",
@@ -136,17 +135,17 @@ See [notes/SAMPLE-OUTPUT.md](notes/SAMPLE-OUTPUT.md) for a complete example with
 ## Cost Breakdown
 
 **Target:** <$0.06 per video
-**Actual:** ~$0.017 per video
+**Actual:** ~$0.012 per video
 
 | Component | Cost per Video |
 |-----------|---------------|
 | GPT-4 Vision (cover analysis) | ~$0.01 |
-| Whisper (transcription) | ~$0.006 |
+| **AssemblyAI (transcription)** | **~$0.001** |
 | GPT-4 Mini (metadata) | ~$0.001 |
 | RapidAPI (TikTok data) | Included |
 | Google Drive storage | Included |
 
-**Budget:** $50 for testing (~830 videos at target rate, ~2,940 at actual rate)
+**Budget:** $50 for testing (~830 videos at target rate, ~4,160 at actual rate)
 
 ## Tag Guidelines
 
@@ -161,14 +160,15 @@ See [notes/SAMPLE-OUTPUT.md](notes/SAMPLE-OUTPUT.md) for a complete example with
 - **Audience tags:** viral, trending, popular, fyp
 - **Generic tags:** video, tiktok, content
 
-## Large File Handling
+## Transcription with AssemblyAI
 
-OpenAI Whisper has a 25MB file size limit. For larger videos:
+AssemblyAI provides superior transcription:
 
-- CloudConvert extracts audio as MP3 (typically 1-5MB)
-- Processing adds 5-15 seconds but ensures all videos work
-- Free tier: 25 conversions/day
-- See [workflows/CLOUDCONVERT_SETUP.md](workflows/CLOUDCONVERT_SETUP.md) for implementation
+- **No file size limits** - handles videos of any size
+- **96% accuracy** - higher than competitors
+- **2-3x faster** - quicker processing
+- **$50 free credit** - test with ~20,000 videos
+- See [workflows/ASSEMBLYAI_SETUP.md](workflows/ASSEMBLYAI_SETUP.md) for setup
 
 ## Known Limitations
 

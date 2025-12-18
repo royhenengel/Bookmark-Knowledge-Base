@@ -88,27 +88,6 @@
     },
     {
       "parameters": {
-        "resource": "audio",
-        "operation": "transcribe",
-        "options": {}
-      },
-      "id": "transcribe-audio",
-      "name": "Transcribe Audio",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.6,
-      "position": [
-        912,
-        208
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "p4lXz4PI3LIye0EB",
-          "name": "OpenAi account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
         "numberInputs": 3,
@@ -155,7 +134,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const videoInfo = $('Get Video Info').item.json;\nconst visualAnalysis = $('Visual Analysis').item.json.choices[0].message.content;\nconst transcription = $('Transcribe Audio').item.json.text;\nconst metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\nconst googleDrive = $('Upload to Google Drive').item.json;\n\nreturn {\n  json: {\n    title: metadata.title,\n    description: metadata.description,\n    tags: metadata.tags,\n    transcription: transcription,\n    video_url: videoInfo.video_url,\n    video_id: videoInfo.video_id,\n    author: videoInfo.author,\n    duration: videoInfo.duration,\n    music: { title: videoInfo.music_title, artist: videoInfo.music_author },\n    visual_analysis: visualAnalysis,\n    google_drive: {\n      file_id: googleDrive.id,\n      file_name: googleDrive.name,\n      file_url: googleDrive.webViewLink || 'N/A'\n    },\n    processed_at: new Date().toISOString()\n  }\n};"
+        "jsCode": "const videoInfo = $('Get Video Info').item.json;\nconst visualAnalysis = $('Visual Analysis').item.json.choices[0].message.content;\nconst transcription = $('Get Transcription').item.json.text;\nconst metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\nconst googleDrive = $('Upload to Google Drive').item.json;\n\nreturn {\n  json: {\n    title: metadata.title,\n    description: metadata.description,\n    tags: metadata.tags,\n    transcription: transcription,\n    video_url: videoInfo.video_url,\n    video_id: videoInfo.video_id,\n    author: videoInfo.author,\n    duration: videoInfo.duration,\n    music: { title: videoInfo.music_title, artist: videoInfo.music_author },\n    visual_analysis: visualAnalysis,\n    google_drive: {\n      file_id: googleDrive.id,\n      file_name: googleDrive.name,\n      file_url: googleDrive.webViewLink || 'N/A'\n    },\n    processed_at: new Date().toISOString()\n  }\n};"
       },
       "id": "format-output",
       "name": "Format Final Output",
@@ -209,16 +188,96 @@
     },
     {
       "parameters": {
-        "jsCode": "// CloudConvert async workflow with polling\nconst apiKey = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiNTA5OGI3MTIzYjNjYTNkOWEyNDJhYzg2MmQ0YTJiMjM5YWNjMGZhMTNlZTRlZTU1MmFiYjUxZjFhMzRlY2JkNzA3N2UzN2I0OTMzZWFlMzYiLCJpYXQiOjE3MzQ0NzAzMDQuMDE0MTIsIm5iZiI6MTczNDQ3MDMwNC4wMTQxMjIsImV4cCI6NDg4ODE0MzkwNC4wMDk4OTMsInN1YiI6IjczMDYwNjQ3Iiwic2NvcGVzIjpbInVzZXIucmVhZCIsInVzZXIud3JpdGUiLCJ0YXNrLnJlYWQiLCJ0YXNrLndyaXRlIiwid2ViaG9vay5yZWFkIiwid2ViaG9vay53cml0ZSIsInByZXNldC5yZWFkIiwicHJlc2V0LndyaXRlIl19.KbEAkJNXAO2lPyPn2YyO2JEzd2gOD0wGqJZNQGEaCOneBG52b0-Xh6vKL6Fh56OsYAiJYDwpJETv-yv9WYKb7EvEaWTrE3HqtqAp0rULjWW3ooP9v-qiNy8EIJnzQB2BWYPl5DYx-mnEBOXi8jqLnbWuBvZAjvTRs8kO3nHxbzkTSW9_L4L1HhvTKEOKZ4Tz5Og8Y5WrPk0NhWMW5qJqvRKdU0BkdGBOqpLcZnTt8uP2dHH8sLgS0EBrBpY-NxY7qjO-zTZZ0e0Y9UjJXjKPqn9F7oR1nMvzYqgfKwOZ3bL8ooOT7uHEAQo4Ol9n2FjE0hpN_kJT7gHgZZLXtbkKDQ';\nconst videoUrl = $('Get Video Info').item.json.video_download_url;\n\n// Step 1: Create job with import/url (no upload needed!)\nconst jobResponse = await $http.request({\n  method: 'POST',\n  url: 'https://api.cloudconvert.com/v2/jobs',\n  headers: {\n    'Authorization': `Bearer ${apiKey}`,\n    'Content-Type': 'application/json'\n  },\n  body: {\n    tasks: {\n      'import-video': {\n        operation: 'import/url',\n        url: videoUrl,\n        filename: 'video.mp4'\n      },\n      'convert-audio': {\n        operation: 'convert',\n        input: ['import-video'],\n        output_format: 'mp3',\n        audio_codec: 'mp3',\n        audio_bitrate: 128\n      },\n      'export-audio': {\n        operation: 'export/url',\n        input: ['convert-audio']\n      }\n    }\n  }\n});\n\nconst jobData = await jobResponse.json();\nconst jobUrl = jobData.data.links.self;\n\n// Step 2: Poll for completion (max 60 seconds)\nlet exportUrl = null;\nfor (let attempt = 0; attempt < 30; attempt++) {\n  await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s\n\n  const statusResponse = await $http.request({\n    method: 'GET',\n    url: jobUrl,\n    headers: {\n      'Authorization': `Bearer ${apiKey}`\n    }\n  });\n\n  const statusData = await statusResponse.json();\n  const status = statusData.data.status;\n\n  if (status === 'finished') {\n    const exportTask = statusData.data.tasks.find(t => t.name === 'export-audio');\n    exportUrl = exportTask.result.files[0].url;\n    break;\n  } else if (status === 'error') {\n    throw new Error('CloudConvert conversion failed');\n  }\n}\n\nif (!exportUrl) {\n  throw new Error('CloudConvert job timed out after 60 seconds');\n}\n\n// Step 3: Download MP3\nconst mp3Response = await $http.request({\n  method: 'GET',\n  url: exportUrl,\n  encoding: 'arraybuffer'\n});\n\n// Return as binary data for Whisper\nreturn {\n  binary: {\n    data: mp3Response.body\n  }\n};\n"
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "binaryData",
+        "options": {
+          "batching": {
+            "batch": {}
+          }
+        }
       },
-      "id": "cloudconvert-convert",
-      "name": "CloudConvert Audio Extract",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "upload-to-assemblyai",
+      "name": "Upload to AssemblyAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         800,
-        304
-      ]
+        208
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assemblyai",
+          "name": "AssemblyAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/transcript",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"audio_url\": $json.upload_url} }}",
+        "options": {}
+      },
+      "id": "submit-transcription",
+      "name": "Submit Transcription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        208
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assemblyai",
+          "name": "AssemblyAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "unit": "seconds",
+        "amount": 10
+      },
+      "id": "wait-assemblyai",
+      "name": "Wait for AssemblyAI",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        208
+      ],
+      "webhookSuffix": ""
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ \"https://api.assemblyai.com/v2/transcript/\" + $('Submit Transcription').item.json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-transcription",
+      "name": "Get Transcription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        208
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assemblyai",
+          "name": "AssemblyAI API"
+        }
+      }
     }
   ],
   "connections": {
@@ -258,7 +317,7 @@
             "index": 0
           },
           {
-            "node": "CloudConvert Audio Extract",
+            "node": "Upload to AssemblyAI",
             "type": "main",
             "index": 0
           }
@@ -375,13 +434,46 @@
         ]
       ]
     },
-    "CloudConvert Audio Extract": {
+    "Upload to AssemblyAI": {
       "main": [
         [
           {
-            "node": "Transcribe Audio",
+            "node": "Submit Transcription",
             "type": "main",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Transcription": {
+      "main": [
+        [
+          {
+            "node": "Wait for AssemblyAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for AssemblyAI": {
+      "main": [
+        [
+          {
+            "node": "Get Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Transcription": {
+      "main": [
+        [
+          {
+            "node": "Merge All",
+            "type": "main",
+            "index": 1
           }
         ]
       ]
