@@ -111,7 +111,7 @@ Format & Return JSON
    ```
 
 3. **Activate Workflows**
-   - Main: TikTok Video Complete Processor with AssemblyAI
+   - Main: TikTok Video Complete Processor
 
 ## Usage
 

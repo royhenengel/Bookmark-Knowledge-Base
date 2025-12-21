@@ -4,14 +4,15 @@ This folder contains the current working n8n workflows for the TikTok video anal
 
 ## Active Workflows
 
-### TikTok Complete Processor with AssemblyAI
+### TikTok Complete Processor
 
-**File:** `TikTok_Complete_Processor_ASSEMBLYAI.json`
+**File:** `TikTok_Complete_Processor.json`
 **Workflow ID:** `uBoLxqVCmR0Pk1Jk`
 **Webhook:** `https://royhen.app.n8n.cloud/webhook/analyze-video-complete`
 **Status:** ✅ Active and Working
 
 **What it does:**
+
 - Receives TikTok video URLs via webhook
 - Downloads video metadata and video file
 - Performs visual analysis using GPT-4 Vision on cover image
@@ -23,6 +24,7 @@ This folder contains the current working n8n workflows for the TikTok video anal
 **Processing time:** ~25-30 seconds per video
 
 **Output format:**
+
 ```json
 {
   "title": "50-100 character title",
@@ -81,6 +83,7 @@ Visual Analysis                   Download → Upload to Google Drive
 ## Cost Estimates
 
 Target: ~$0.017 per video
+
 - GPT-4 Vision (cover analysis): ~$0.01
 - AssemblyAI (transcription): ~$0.005
 - GPT-4 Mini (metadata generation): ~$0.001
@@ -93,6 +96,7 @@ See [ASSEMBLYAI_SETUP.md](ASSEMBLYAI_SETUP.md) for detailed setup instructions.
 ## Testing
 
 Test the workflow:
+
 ```bash
 curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
   -H 'Content-Type: application/json' \
