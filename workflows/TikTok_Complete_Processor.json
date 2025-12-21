@@ -49,40 +49,13 @@
     },
     {
       "parameters": {
-        "name": "={{ $('Get Video Info').item.json.author + '_' + $('Get Video Info').item.json.video_id + '.mp4' }}",
-        "driveId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "My Drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "value": "root",
-          "mode": "list"
-        },
-        "options": {}
-      },
-      "id": "upload-to-drive",
-      "name": "Upload to Google Drive",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
-      "position": [912, 400],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "ofFKlLc4IoxLD68F",
-          "name": "Google Account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
-        "numberInputs": 3,
+        "numberInputs": 2,
         "options": {}
       },
-      "id": "merge-all",
-      "name": "Merge All",
+      "id": "merge-transcription-visual",
+      "name": "Merge Transcription & Visual",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
       "position": [1704, 192]
@@ -112,13 +85,53 @@
     },
     {
       "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 2,
+        "options": {}
+      },
+      "id": "merge-metadata-video",
+      "name": "Merge Metadata with Video",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2056, 208]
+    },
+    {
+      "parameters": {
+        "name": "={{ (() => {\n  const metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\n  const title = metadata.title;\n  const videoId = $('Get Video Info').item.json.video_id;\n  const sanitized = title.toLowerCase().replace(/[^a-z0-9\\s]/g, '').replace(/\\s+/g, '_').substring(0, 80);\n  return `${sanitized}_${videoId}.mp4`;\n})() }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "root",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "id": "upload-to-drive",
+      "name": "Upload to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [2232, 208],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ofFKlLc4IoxLD68F",
+          "name": "Google Account"
+        }
+      }
+    },
+    {
+      "parameters": {
         "jsCode": "const videoInfo = $('Get Video Info').item.json;\nconst visualAnalysis = $('Visual Analysis').item.json.choices[0].message.content;\nconst transcription = $('Check Status').item.json.text;\nconst metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\nconst googleDrive = $('Upload to Google Drive').item.json;\n\nreturn {\n  json: {\n    title: metadata.title,\n    description: metadata.description,\n    tags: metadata.tags,\n    transcription: transcription,\n    video_url: videoInfo.video_url,\n    video_id: videoInfo.video_id,\n    author: videoInfo.author,\n    duration: videoInfo.duration,\n    music: { title: videoInfo.music_title, artist: videoInfo.music_author },\n    visual_analysis: visualAnalysis,\n    google_drive: {\n      file_id: googleDrive.id,\n      file_name: googleDrive.name,\n      file_url: googleDrive.webViewLink || 'N/A'\n    },\n    processed_at: new Date().toISOString()\n  }\n};"
       },
       "id": "format-output",
       "name": "Format Final Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2104, 208]
+      "position": [2408, 208]
     },
     {
       "parameters": {
@@ -130,7 +143,7 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [2328, 208]
+      "position": [2584, 208]
     },
     {
       "parameters": {
@@ -281,13 +294,10 @@
     "Download Video": {
       "main": [
         [
-          {"node": "Upload to Google Drive", "type": "main", "index": 0},
-          {"node": "Upload to AssemblyAI", "type": "main", "index": 0}
+          {"node": "Upload to AssemblyAI", "type": "main", "index": 0},
+          {"node": "Merge Metadata with Video", "type": "main", "index": 1}
         ]
       ]
-    },
-    "Upload to Google Drive": {
-      "main": [[{"node": "Merge All", "type": "main", "index": 0}]]
     },
     "Upload to AssemblyAI": {
       "main": [[{"node": "Submit Transcription", "type": "main", "index": 0}]]
@@ -303,17 +313,23 @@
     },
     "If Completed": {
       "main": [
-        [{"node": "Merge All", "type": "main", "index": 1}],
+        [{"node": "Merge Transcription & Visual", "type": "main", "index": 0}],
         [{"node": "Wait 3 Seconds", "type": "main", "index": 0}]
       ]
     },
     "Visual Analysis": {
-      "main": [[{"node": "Merge All", "type": "main", "index": 2}]]
+      "main": [[{"node": "Merge Transcription & Visual", "type": "main", "index": 1}]]
     },
-    "Merge All": {
+    "Merge Transcription & Visual": {
       "main": [[{"node": "Generate Metadata", "type": "main", "index": 0}]]
     },
     "Generate Metadata": {
+      "main": [[{"node": "Merge Metadata with Video", "type": "main", "index": 0}]]
+    },
+    "Merge Metadata with Video": {
+      "main": [[{"node": "Upload to Google Drive", "type": "main", "index": 0}]]
+    },
+    "Upload to Google Drive": {
       "main": [[{"node": "Format Final Output", "type": "main", "index": 0}]]
     },
     "Format Final Output": {
