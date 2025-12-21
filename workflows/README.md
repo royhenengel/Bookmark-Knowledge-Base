@@ -17,8 +17,11 @@ This folder contains the current working n8n workflows for the TikTok video anal
 - Downloads video metadata and video file
 - Performs visual analysis using GPT-4 Vision on cover image
 - Transcribes audio using AssemblyAI
-- Uploads video to Google Drive
 - Generates metadata (title, description, tags) using GPT-4 Mini
+- Uploads video to Google Drive with smart filename:
+  - Format: `[Title (max 80 chars)] - [Capitalized Author].mp4`
+  - Title preserves original casing, removes special characters
+  - Author name converted from `username_format` to `Username Format`
 - Returns comprehensive JSON response
 
 **Processing time:** ~25-30 seconds per video
@@ -42,7 +45,7 @@ This folder contains the current working n8n workflows for the TikTok video anal
   "visual_analysis": "detailed gpt-4 vision analysis",
   "google_drive": {
     "file_id": "google drive file id",
-    "file_name": "author_videoid.mp4",
+    "file_name": "Video Title Up To 80 Characters - Capitalized Author.mp4",
     "file_url": "google drive url"
   },
   "processed_at": "ISO timestamp"
@@ -103,6 +106,11 @@ curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
 ## Notes
 
 - Videos are currently uploaded to Google Drive root folder
+- **Filename Format:**
+  - Title limited to 80 characters (preserves original casing and spaces)
+  - Author capitalized from underscore format (e.g., `sabrina_ramonov` → `Sabrina Ramonov`)
+  - Special characters removed from title
+  - Example: `Unlock AI Simple Tutorials for Everyday Tasks - Sabrina Ramonov.mp4`
 - Transcription will be empty for videos without speech (music/ambient sound only)
 - All tags are content descriptors - NO audience tags like "viral" or "trending"
 - Visual analysis is based on cover image only (not full video frames)

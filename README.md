@@ -13,7 +13,7 @@ This project processes TikTok videos to generate comprehensive metadata includin
 - **Rich Descriptions** (covering visual and audio content)
 - **Audio Transcriptions** (via AssemblyAI)
 - **Visual Analysis** (via GPT-4 Vision)
-- **Google Drive Storage** (organized video library)
+- **Google Drive Storage** (organized video library with descriptive filenames)
 
 **Processing Time:** ~25-30 seconds per video
 **Cost:** ~$0.017 per video (target: <$0.06)
@@ -24,7 +24,9 @@ This project processes TikTok videos to generate comprehensive metadata includin
 - End-to-end video processing via n8n workflows
 - GPT-4 Vision analysis of video cover images
 - **AssemblyAI audio transcription** (96% accuracy, no file limits, faster)
-- Automated Google Drive uploads
+- Automated Google Drive uploads with smart filenames
+  - Format: `[Title up to 80 chars] - [Capitalized Author].mp4`
+  - Example: `Unlock AI Simple Tutorials for Everyday Tasks - Sabrina Ramonov.mp4`
 - GPT-4 Mini metadata generation
 - Structured JSON output
 
@@ -77,7 +79,7 @@ Format & Return JSON
   "visual_analysis": "Detailed GPT-4 Vision analysis...",
   "google_drive": {
     "file_id": "abc123",
-    "file_name": "username_123456.mp4",
+    "file_name": "Video Title Up To 80 Characters - Username.mp4",
     "file_url": "https://drive.google.com/file/d/..."
   },
   "processed_at": "2025-12-17T19:38:04.990Z"

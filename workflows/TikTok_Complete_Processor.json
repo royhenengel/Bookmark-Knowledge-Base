@@ -98,7 +98,7 @@
     },
     {
       "parameters": {
-        "name": "={{ (() => {\n  const metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\n  const title = metadata.title;\n  const author = $('Get Video Info').item.json.author;\n  const sanitized = title.replace(/[^a-z0-9\\s]/gi, '').replace(/\\s+/g, ' ').trim();\n  const fullName = `${sanitized} - ${author}`;\n  return fullName.substring(0, 80) + '.mp4';\n})() }}",
+        "name": "={{ (() => {\n  const metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\n  const title = metadata.title;\n  const author = $('Get Video Info').item.json.author;\n  const sanitizedTitle = title.replace(/[^a-z0-9\\s]/gi, '').replace(/\\s+/g, ' ').trim().substring(0, 80);\n  const capitalizedAuthor = author.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');\n  return `${sanitizedTitle} - ${capitalizedAuthor}.mp4`;\n})() }}",
         "driveId": {
           "__rl": true,
           "mode": "list",
