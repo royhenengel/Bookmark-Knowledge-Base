@@ -3,99 +3,34 @@
   "nodes": [
     {
       "parameters": {
-        "mode": "combine",
-        "combineBy": "combineByPosition",
+        "httpMethod": "POST",
+        "path": "analyze-video-complete",
+        "responseMode": "responseNode",
         "options": {}
       },
-      "id": "b45c60bb-9582-49d8-a222-79ba00b7564b",
-      "name": "Merge Transcription & Visual",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [
-        912,
-        -576
-      ]
-    },
-    {
-      "parameters": {
-        "mode": "combine",
-        "combineBy": "combineByPosition",
-        "options": {}
-      },
-      "id": "1578197b-c077-42f8-aa29-38013f3117d6",
-      "name": "Merge Metadata with Video",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [
-        1312,
-        -720
-      ]
+      "id": "7398681e-0a40-4060-aa00-90ea83f327b9",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-640, -736],
+      "webhookId": "analyze-video-complete"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://royhen.app.n8n.cloud/webhook/process-video-nocode",
+        "url": "https://us-central1-video-processor-rhe.cloudfunctions.net/video-downloader",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ video_url: $json.body.video_url }) }}",
-        "options": {}
-      },
-      "id": "8c8ca030-f1b4-4059-bff9-fa78514227d4",
-      "name": "Get Video Info",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -448,
-        -736
-      ]
-    },
-    {
-      "parameters": {
-        "url": "={{ $json.video_download_url }}",
+        "jsonBody": "={{ JSON.stringify({ video_url: $json.body.video_url, extract_audio: true }) }}",
         "options": {
-          "response": {
-            "response": {
-              "responseFormat": "file"
-            }
-          }
+          "timeout": 300000
         }
       },
-      "id": "df299cb0-16b9-4d15-8be5-2351429039db",
-      "name": "Download Video",
+      "id": "cloud-function-download",
+      "name": "Cloud Function Download",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        -256,
-        -736
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.assemblyai.com/v2/upload",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "contentType": "binaryData",
-        "inputDataFieldName": "data",
-        "options": {
-          "timeout": 120000
-        }
-      },
-      "id": "fdf2ac4b-a5f5-4d7d-a7cc-eddbbad5afb4",
-      "name": "Upload to AssemblyAI",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -96,
-        -944
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "eJYyx8goZbb1aVw9",
-          "name": "AssemblyAI API"
-        }
-      }
+      "position": [-448, -736]
     },
     {
       "parameters": {
@@ -105,17 +40,14 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ {\"audio_url\": $json.upload_url} }}",
+        "jsonBody": "={{ JSON.stringify({ audio_url: $json.video.public_url }) }}",
         "options": {}
       },
       "id": "e44f6e5f-654d-450f-a5e3-1e2b6ab5c586",
       "name": "Submit Transcription",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        96,
-        -944
-      ],
+      "position": [-96, -944],
       "credentials": {
         "httpHeaderAuth": {
           "id": "eJYyx8goZbb1aVw9",
@@ -131,10 +63,7 @@
       "name": "Wait 3 Seconds",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [
-        272,
-        -944
-      ],
+      "position": [96, -944],
       "webhookId": "66e94262-ce65-4a7f-b10c-bfe01c328f5c"
     },
     {
@@ -148,40 +77,11 @@
       "name": "Check Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        448,
-        -944
-      ],
+      "position": [272, -944],
       "credentials": {
         "httpHeaderAuth": {
           "id": "eJYyx8goZbb1aVw9",
           "name": "AssemblyAI API"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.openai.com/v1/chat/completions",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "openAiApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Analyze this TikTok video cover image. Provide detailed analysis covering:\\n1. Visual elements (people, objects, setting, colors, composition)\\n2. Style and mood (aesthetic, tone, atmosphere)\\n3. Any visible text or graphics\\n4. Overall impression and theme\\n\\nBe specific and detailed.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{ $('Get Video Info').item.json.cover_url }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 500\n}",
-        "options": {}
-      },
-      "id": "6480a4cc-da75-42f4-8fc3-fa6c03a12e06",
-      "name": "Visual Analysis",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -256,
-        -560
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "p4lXz4PI3LIye0EB",
-          "name": "OpenAi account"
         }
       }
     },
@@ -213,10 +113,42 @@
       "name": "If Completed",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        624,
-        -944
-      ]
+      "position": [448, -944]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Analyze this TikTok video cover image. Provide detailed analysis covering:\\n1. Visual elements (people, objects, setting, colors, composition)\\n2. Style and mood (aesthetic, tone, atmosphere)\\n3. Any visible text or graphics\\n4. Overall impression and theme\\n\\nBe specific and detailed.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{ $('Cloud Function Download').item.json.metadata.thumbnail }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 500\n}",
+        "options": {}
+      },
+      "id": "6480a4cc-da75-42f4-8fc3-fa6c03a12e06",
+      "name": "Visual Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-256, -560],
+      "credentials": {
+        "openAiApi": {
+          "id": "p4lXz4PI3LIye0EB",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "b45c60bb-9582-49d8-a222-79ba00b7564b",
+      "name": "Merge Transcription & Visual",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [720, -576]
     },
     {
       "parameters": {
@@ -233,10 +165,7 @@
       "name": "Generate Metadata",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1120,
-        -576
-      ],
+      "position": [928, -576],
       "credentials": {
         "openAiApi": {
           "id": "p4lXz4PI3LIye0EB",
@@ -246,54 +175,7 @@
     },
     {
       "parameters": {
-        "name": "={{ (() => {\n  const metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\n  const title = metadata.title;\n  const author = $('Get Video Info').item.json.author;\n  const sanitizedTitle = title.replace(/[^a-z0-9\\s]/gi, '').replace(/\\s+/g, ' ').trim().substring(0, 80);\n  const capitalizedAuthor = author.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');\n  return `${sanitizedTitle} - ${capitalizedAuthor}.mp4`;\n})() }}",
-        "driveId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "My Drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "value": "1G0AhK4a9chK8bhYe6wIBgQD7HsVPHOhc",
-          "mode": "list",
-          "cachedResultName": "TikTok Videos",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/1G0AhK4a9chK8bhYe6wIBgQD7HsVPHOhc"
-        },
-        "options": {}
-      },
-      "id": "5f130963-8427-4802-a182-efc8c360babf",
-      "name": "Upload to Google Drive",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
-      "position": [
-        1520,
-        -720
-      ],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "ofFKlLc4IoxLD68F",
-          "name": "Google Account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "id": "fecc95d8-a8bd-48c7-8a49-72045fba5b0e",
-      "name": "Respond to Webhook",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [
-        2300,
-        -720
-      ]
-    },
-    {
-      "parameters": {
-        "url": "={{ $('Get Video Info').item.json.audio_url }}",
+        "url": "={{ $('Cloud Function Download').item.json.audio.public_url }}",
         "options": {
           "response": {
             "response": {
@@ -304,13 +186,10 @@
         }
       },
       "id": "download-audio",
-      "name": "Download Audio",
+      "name": "Download Audio from Storage",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        -96,
-        -736
-      ]
+      "position": [-256, -736]
     },
     {
       "parameters": {
@@ -320,10 +199,7 @@
       "name": "ACRCloud Prepare Signature",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        96,
-        -736
-      ]
+      "position": [-64, -736]
     },
     {
       "parameters": {
@@ -372,10 +248,66 @@
       "name": "ACRCloud Music Recognition",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        288,
-        -736
-      ]
+      "position": [128, -736]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Cloud Function Download').item.json.video.public_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "download-video-for-drive",
+      "name": "Download Video from Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1136, -720]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "1578197b-c077-42f8-aa29-38013f3117d6",
+      "name": "Merge Metadata with Video",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1328, -720]
+    },
+    {
+      "parameters": {
+        "name": "={{ (() => {\n  const metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\n  const title = metadata.title;\n  const author = $('Cloud Function Download').item.json.metadata.uploader;\n  const sanitizedTitle = title.replace(/[^a-z0-9\\s]/gi, '').replace(/\\s+/g, ' ').trim().substring(0, 80);\n  const capitalizedAuthor = author.split(/[_\\s]+/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');\n  return `${sanitizedTitle} - ${capitalizedAuthor}.mp4`;\n})() }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1G0AhK4a9chK8bhYe6wIBgQD7HsVPHOhc",
+          "mode": "list",
+          "cachedResultName": "TikTok Videos",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1G0AhK4a9chK8bhYe6wIBgQD7HsVPHOhc"
+        },
+        "options": {}
+      },
+      "id": "5f130963-8427-4802-a182-efc8c360babf",
+      "name": "Upload to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1520, -720],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ofFKlLc4IoxLD68F",
+          "name": "Google Account"
+        }
+      }
     },
     {
       "parameters": {
@@ -387,70 +319,48 @@
       "name": "Merge ACRCloud with Output",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [
-        1920,
-        -720
-      ]
+      "position": [1920, -720]
     },
     {
       "parameters": {
-        "jsCode": "const videoInfo = $('Get Video Info').item.json;\nconst visualAnalysis = $('Visual Analysis').item.json.choices[0].message.content;\nconst transcription = $('Check Status').item.json.text;\nconst metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\nconst googleDrive = $('Upload to Google Drive').item.json;\nlet acrResult = $('ACRCloud Music Recognition').item.json;\n\n// Parse ACRCloud result - handle wrapped data field\nif (acrResult.data && typeof acrResult.data === 'string') {\n  acrResult = JSON.parse(acrResult.data);\n}\n\n// Minimum confidence threshold (70%)\nconst MIN_CONFIDENCE = 0.70;\n\n// Helper function to parse a single music match\nconst parseMatch = (music, matchType) => {\n  const score = music.score || 0;\n  return {\n    title: music.title,\n    artist: music.artists?.[0]?.name || 'Unknown',\n    album: music.album?.name || null,\n    release_date: music.release_date || null,\n    confidence: Math.round(score * 100),\n    confidence_raw: score,\n    match_type: matchType,\n    play_offset_ms: music.play_offset_ms || null,\n    duration_ms: music.duration_ms || null,\n    spotify_id: music.external_metadata?.spotify?.track?.id || null,\n    apple_music_id: music.external_metadata?.apple?.track?.id || null,\n    deezer_id: music.external_metadata?.deezer?.track?.id || null\n  };\n};\n\n// Collect ALL matches from both music and humming arrays\nlet allMatches = [];\nlet allMatchesFiltered = [];\n\nif (acrResult.status && acrResult.status.code === 0 && acrResult.metadata) {\n  // Get all music matches\n  const musicMatches = acrResult.metadata.music || [];\n  for (const music of musicMatches) {\n    const parsed = parseMatch(music, 'music');\n    allMatches.push(parsed);\n    if (parsed.confidence_raw >= MIN_CONFIDENCE) {\n      allMatchesFiltered.push(parsed);\n    }\n  }\n  \n  // Get all humming matches\n  const hummingMatches = acrResult.metadata.humming || [];\n  for (const music of hummingMatches) {\n    const parsed = parseMatch(music, 'humming');\n    allMatches.push(parsed);\n    if (parsed.confidence_raw >= MIN_CONFIDENCE) {\n      allMatchesFiltered.push(parsed);\n    }\n  }\n}\n\n// Sort by confidence (highest first)\nallMatches.sort((a, b) => b.confidence_raw - a.confidence_raw);\nallMatchesFiltered.sort((a, b) => b.confidence_raw - a.confidence_raw);\n\n// Build recognition status\nlet recognitionStatus = 'no_match';\nif (allMatches.length > 0) {\n  if (allMatchesFiltered.length > 0) {\n    recognitionStatus = 'matched';\n  } else {\n    recognitionStatus = 'low_confidence';\n  }\n}\n\n// Get highest confidence for summary\nconst highestConfidence = allMatches.length > 0 ? allMatches[0].confidence : null;\n\nreturn {\n  json: {\n    title: metadata.title,\n    description: metadata.description,\n    tags: metadata.tags,\n    transcription: transcription,\n    video_url: videoInfo.video_url,\n    video_id: videoInfo.video_id,\n    author: videoInfo.author,\n    duration: videoInfo.duration,\n    music: {\n      tiktok: { title: videoInfo.music_title, artist: videoInfo.music_author },\n      recognized_songs: allMatchesFiltered,\n      recognition_status: recognitionStatus,\n      total_matches_found: allMatches.length,\n      matches_above_threshold: allMatchesFiltered.length,\n      highest_confidence: highestConfidence,\n      all_matches_raw: allMatches\n    },\n    visual_analysis: visualAnalysis,\n    google_drive: {\n      file_id: googleDrive.id,\n      file_name: googleDrive.name,\n      file_url: googleDrive.webViewLink || 'N/A'\n    },\n    processed_at: new Date().toISOString()\n  }\n};"
+        "jsCode": "const cloudFunction = $('Cloud Function Download').item.json;\nconst visualAnalysis = $('Visual Analysis').item.json.choices[0].message.content;\nconst transcription = $('Check Status').item.json.text;\nconst metadata = JSON.parse($('Generate Metadata').item.json.choices[0].message.content);\nconst googleDrive = $('Upload to Google Drive').item.json;\nlet acrResult = $('ACRCloud Music Recognition').item.json;\n\n// Parse ACRCloud result - handle wrapped data field\nif (acrResult.data && typeof acrResult.data === 'string') {\n  acrResult = JSON.parse(acrResult.data);\n}\n\n// Minimum confidence threshold (70%)\nconst MIN_CONFIDENCE = 0.70;\n\n// Helper function to parse a single music match\nconst parseMatch = (music, matchType) => {\n  const score = music.score || 0;\n  return {\n    title: music.title,\n    artist: music.artists?.[0]?.name || 'Unknown',\n    album: music.album?.name || null,\n    release_date: music.release_date || null,\n    confidence: Math.round(score * 100),\n    confidence_raw: score,\n    match_type: matchType,\n    play_offset_ms: music.play_offset_ms || null,\n    duration_ms: music.duration_ms || null,\n    spotify_id: music.external_metadata?.spotify?.track?.id || null,\n    apple_music_id: music.external_metadata?.apple?.track?.id || null,\n    deezer_id: music.external_metadata?.deezer?.track?.id || null\n  };\n};\n\n// Collect ALL matches from both music and humming arrays\nlet allMatches = [];\nlet allMatchesFiltered = [];\n\nif (acrResult.status && acrResult.status.code === 0 && acrResult.metadata) {\n  // Get all music matches\n  const musicMatches = acrResult.metadata.music || [];\n  for (const music of musicMatches) {\n    const parsed = parseMatch(music, 'music');\n    allMatches.push(parsed);\n    if (parsed.confidence_raw >= MIN_CONFIDENCE) {\n      allMatchesFiltered.push(parsed);\n    }\n  }\n  \n  // Get all humming matches\n  const hummingMatches = acrResult.metadata.humming || [];\n  for (const music of hummingMatches) {\n    const parsed = parseMatch(music, 'humming');\n    allMatches.push(parsed);\n    if (parsed.confidence_raw >= MIN_CONFIDENCE) {\n      allMatchesFiltered.push(parsed);\n    }\n  }\n}\n\n// Sort by confidence (highest first)\nallMatches.sort((a, b) => b.confidence_raw - a.confidence_raw);\nallMatchesFiltered.sort((a, b) => b.confidence_raw - a.confidence_raw);\n\n// Build recognition status\nlet recognitionStatus = 'no_match';\nif (allMatches.length > 0) {\n  if (allMatchesFiltered.length > 0) {\n    recognitionStatus = 'matched';\n  } else {\n    recognitionStatus = 'low_confidence';\n  }\n}\n\n// Get highest confidence for summary\nconst highestConfidence = allMatches.length > 0 ? allMatches[0].confidence : null;\n\nreturn {\n  json: {\n    title: metadata.title,\n    description: metadata.description,\n    tags: metadata.tags,\n    transcription: transcription,\n    video_url: cloudFunction.video.public_url,\n    video_id: cloudFunction.metadata.video_id,\n    author: cloudFunction.metadata.uploader,\n    duration: cloudFunction.metadata.duration,\n    source: cloudFunction.metadata.source,\n    music: {\n      recognized_songs: allMatchesFiltered,\n      recognition_status: recognitionStatus,\n      total_matches_found: allMatches.length,\n      matches_above_threshold: allMatchesFiltered.length,\n      highest_confidence: highestConfidence,\n      all_matches_raw: allMatches\n    },\n    visual_analysis: visualAnalysis,\n    google_drive: {\n      file_id: googleDrive.id,\n      file_name: googleDrive.name,\n      file_url: googleDrive.webViewLink || 'N/A'\n    },\n    cloud_storage: {\n      video_url: cloudFunction.video.public_url,\n      audio_url: cloudFunction.audio?.public_url || null,\n      video_size_bytes: cloudFunction.video.size_bytes,\n      audio_size_bytes: cloudFunction.audio?.size_bytes || null\n    },\n    processed_at: new Date().toISOString()\n  }\n};"
       },
       "id": "4154fe57-bb4e-412a-a463-c8e047651e16",
       "name": "Format Final Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1728,
-        -720
-      ]
+      "position": [2112, -720]
     },
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "analyze-video-complete",
-        "responseMode": "responseNode",
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
         "options": {}
       },
-      "id": "7398681e-0a40-4060-aa00-90ea83f327b9",
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        -640,
-        -736
-      ],
-      "webhookId": "analyze-video-complete"
+      "id": "fecc95d8-a8bd-48c7-8a49-72045fba5b0e",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2300, -720]
     }
   ],
   "connections": {
-    "Merge Transcription & Visual": {
+    "Webhook": {
       "main": [
         [
           {
-            "node": "Generate Metadata",
+            "node": "Cloud Function Download",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Merge Metadata with Video": {
+    "Cloud Function Download": {
       "main": [
         [
           {
-            "node": "Upload to Google Drive",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Video Info": {
-      "main": [
-        [
-          {
-            "node": "Download Video",
+            "node": "Submit Transcription",
             "type": "main",
             "index": 0
           },
@@ -460,56 +370,7 @@
             "index": 0
           },
           {
-            "node": "Download Audio",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Download Audio": {
-      "main": [
-        [
-          {
-            "node": "ACRCloud Prepare Signature",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Download Video": {
-      "main": [
-        [
-          {
-            "node": "Upload to AssemblyAI",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Merge Metadata with Video",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Upload to AssemblyAI": {
-      "main": [
-        [
-          {
-            "node": "Submit Transcription",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "ACRCloud Prepare Signature": {
-      "main": [
-        [
-          {
-            "node": "ACRCloud Music Recognition",
+            "node": "Download Audio from Storage",
             "type": "main",
             "index": 0
           }
@@ -549,17 +410,6 @@
         ]
       ]
     },
-    "Visual Analysis": {
-      "main": [
-        [
-          {
-            "node": "Merge Transcription & Visual",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
     "If Completed": {
       "main": [
         [
@@ -578,22 +428,55 @@
         ]
       ]
     },
-    "Generate Metadata": {
+    "Visual Analysis": {
       "main": [
         [
           {
-            "node": "Merge Metadata with Video",
+            "node": "Merge Transcription & Visual",
             "type": "main",
             "index": 1
           }
         ]
       ]
     },
-    "Upload to Google Drive": {
+    "Merge Transcription & Visual": {
       "main": [
         [
           {
-            "node": "Merge ACRCloud with Output",
+            "node": "Generate Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Metadata": {
+      "main": [
+        [
+          {
+            "node": "Download Video from Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Audio from Storage": {
+      "main": [
+        [
+          {
+            "node": "ACRCloud Prepare Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ACRCloud Prepare Signature": {
+      "main": [
+        [
+          {
+            "node": "ACRCloud Music Recognition",
             "type": "main",
             "index": 0
           }
@@ -607,6 +490,39 @@
             "node": "Merge ACRCloud with Output",
             "type": "main",
             "index": 1
+          }
+        ]
+      ]
+    },
+    "Download Video from Storage": {
+      "main": [
+        [
+          {
+            "node": "Merge Metadata with Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Metadata with Video": {
+      "main": [
+        [
+          {
+            "node": "Upload to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Merge ACRCloud with Output",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -627,17 +543,6 @@
         [
           {
             "node": "Respond to Webhook",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Webhook": {
-      "main": [
-        [
-          {
-            "node": "Get Video Info",
             "type": "main",
             "index": 0
           }

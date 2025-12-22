@@ -14,9 +14,9 @@ This folder contains the n8n workflows for the TikTok video analysis system.
 **What it does:**
 
 - Receives TikTok video URLs via webhook
-- Downloads video metadata and files (video + audio separately)
-- Performs visual analysis using GPT-4 Vision on cover image
-- Transcribes audio using AssemblyAI
+- Calls Cloud Function to download video and upload to Cloud Storage
+- Performs visual analysis using GPT-4 Vision on thumbnail
+- Transcribes audio using AssemblyAI (URL-based, no upload needed)
 - Identifies music using ACRCloud (with confidence filtering)
 - Generates metadata (title, description, tags) using GPT-4 Mini
 - Uploads video to Google Drive with smart filename
@@ -24,34 +24,103 @@ This folder contains the n8n workflows for the TikTok video analysis system.
 
 **Processing time:** ~25-30 seconds per video
 
+## Architecture
+
+The workflow uses a Cloud Function to handle large file downloads, eliminating n8n memory limitations.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         n8n Workflow                             │
+│  (Orchestration - works with URLs only)                         │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Cloud Function                                 │
+│  (Downloads video via RapidAPI, uploads to Cloud Storage)       │
+│  URL: us-central1-video-processor-rhe.cloudfunctions.net        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Cloud Storage                                  │
+│  Bucket: video-processor-temp-rhe                               │
+│  Returns public URLs for video and audio                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ## Node Flow
 
 ```
 Webhook
-    |
-Get Video Info (API call)
-    |
-    +---> Visual Analysis (GPT-4 Vision)
-    |
-    +---> Download Video ---> Upload to AssemblyAI ---> Transcription
-    |                    \--> Merge with Metadata ---> Upload to Google Drive
-    |
-    +---> Download Audio ---> ACRCloud Prepare Signature ---> ACRCloud Music Recognition
-    |
-Merge Transcription & Visual
-    |
-Generate Metadata (GPT-4 Mini)
-    |
-Merge Metadata with Video
-    |
-Upload to Google Drive
-    |
-Merge ACRCloud with Output
-    |
-Format Final Output
-    |
-Respond to Webhook
+    │
+    ▼
+Cloud Function Download ─────────────────────────────────────────┐
+    │ (POST to Cloud Function, returns video/audio URLs)         │
+    │                                                              │
+    ├──► Submit Transcription (AssemblyAI URL-based)              │
+    │         │                                                    │
+    │         ▼                                                    │
+    │    Wait 3 Seconds ──► Check Status ──► If Completed ───────┤
+    │                              │               │               │
+    │                              └───────────────┘ (loop)        │
+    │                                                              │
+    ├──► Visual Analysis (GPT-4 Vision on thumbnail) ────────────┤
+    │                                                              │
+    └──► Download Audio from Storage ──► ACRCloud Signature       │
+              │                                                    │
+              ▼                                                    │
+         ACRCloud Music Recognition ─────────────────────────────►│
+                                                                   │
+                                    Merge Transcription & Visual ◄┘
+                                              │
+                                              ▼
+                                    Generate Metadata (GPT-4 Mini)
+                                              │
+                                              ▼
+                                    Download Video from Storage
+                                              │
+                                              ▼
+                                    Merge Metadata with Video
+                                              │
+                                              ▼
+                                    Upload to Google Drive
+                                              │
+                                              ▼
+                                    Merge ACRCloud with Output
+                                              │
+                                              ▼
+                                    Format Final Output
+                                              │
+                                              ▼
+                                    Respond to Webhook
 ```
+
+## Key Nodes
+
+### Cloud Function Download
+- **Type:** HTTP Request (POST)
+- **URL:** `https://us-central1-video-processor-rhe.cloudfunctions.net/video-downloader`
+- **Timeout:** 300 seconds (5 minutes)
+- **Returns:**
+  - `video.public_url` - Cloud Storage URL for video
+  - `audio.public_url` - Cloud Storage URL for audio (MP3)
+  - `metadata` - title, duration, uploader, video_id, source, thumbnail
+
+### Submit Transcription
+- **Type:** HTTP Request (POST)
+- **URL:** `https://api.assemblyai.com/v2/transcript`
+- **Note:** Uses URL directly - no binary upload needed!
+
+### Download Audio from Storage
+- **Type:** HTTP Request (GET)
+- **Purpose:** Downloads small MP3 file (~180KB) for ACRCloud
+- **Source:** Cloud Storage audio URL
+
+### Download Video from Storage
+- **Type:** HTTP Request (GET)
+- **Purpose:** Downloads video for Google Drive upload
+- **Source:** Cloud Storage video URL
 
 ## Output Format
 
@@ -61,15 +130,12 @@ Respond to Webhook
   "description": "2-3 sentence description",
   "tags": ["tag1", "tag2", ...],
   "transcription": "AssemblyAI transcription",
-  "video_url": "original TikTok URL",
+  "video_url": "Cloud Storage URL",
   "video_id": "video ID",
   "author": "username",
   "duration": 10,
+  "source": "tiktok",
   "music": {
-    "tiktok": {
-      "title": "song title from TikTok",
-      "artist": "artist name"
-    },
     "recognized_songs": [
       {
         "title": "Recognized Song Title",
@@ -95,6 +161,12 @@ Respond to Webhook
     "file_name": "Video Title - Author.mp4",
     "file_url": "Google Drive URL"
   },
+  "cloud_storage": {
+    "video_url": "Cloud Storage video URL",
+    "audio_url": "Cloud Storage audio URL",
+    "video_size_bytes": 2953029,
+    "audio_size_bytes": 182451
+  },
   "processed_at": "ISO timestamp"
 }
 ```
@@ -107,6 +179,8 @@ Respond to Webhook
 | OpenAI API | `p4lXz4PI3LIye0EB` | GPT-4 Vision, GPT-4 Mini |
 | Google Drive OAuth2 | `ofFKlLc4IoxLD68F` | Video uploads |
 | ACRCloud | Configured in Code node | Music recognition (HMAC-SHA1) |
+
+**Note:** Cloud Function does not require n8n credentials - it's publicly accessible.
 
 ## ACRCloud Configuration
 
@@ -131,6 +205,8 @@ Target: ~$0.017 per video
 | AssemblyAI (transcription) | ~$0.005 |
 | ACRCloud (music recognition) | ~$0.001 |
 | GPT-4 Mini (metadata generation) | ~$0.001 |
+| Cloud Function | ~$0.0004 |
+| Google Cloud Storage | Minimal |
 | Google Drive storage | Included |
 
 ## Testing
@@ -146,6 +222,9 @@ curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
 
 ## Notes
 
+- **No Binary Handling in n8n:** The workflow only downloads small files (MP3 for ACRCloud, video for GDrive upload from Cloud Storage)
+- **Cloud Function handles large files:** Video download from TikTok happens in Cloud Function, not n8n
+- **AssemblyAI URL-based:** No need to upload binary - just pass the Cloud Storage URL
 - Videos uploaded to Google Drive with smart filenames
 - **Filename Format:**
   - Title limited to 80 characters (preserves original casing and spaces)
@@ -154,10 +233,20 @@ curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
   - Example: `Unlock AI Simple Tutorials for Everyday Tasks - Sabrina Ramonov.mp4`
 - Transcription will be empty for videos without speech
 - All tags are content descriptors - NO audience tags like "viral" or "trending"
-- Visual analysis is based on cover image only
+- Visual analysis is based on thumbnail only
 - Music recognition may return low-confidence matches for indie/original tracks
 - Multiple songs can be detected per video
 
+## Removed Nodes
+
+The following nodes from the old workflow were removed:
+
+| Node | Reason |
+|------|--------|
+| Get Video Info | Replaced by Cloud Function |
+| Download Video | Replaced by Cloud Function |
+| Upload to AssemblyAI | AssemblyAI now uses URL directly |
+
 ## Last Updated
 
-2025-12-22 - Added ACRCloud music recognition with multi-song support
+2025-12-22 - Updated to Cloud Function architecture

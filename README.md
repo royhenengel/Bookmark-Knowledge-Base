@@ -1,6 +1,6 @@
 # TikTok Bookmark Knowledge Base
 
-AI-powered TikTok video analysis system that automatically generates metadata, transcriptions, identifies music, and stores videos in Google Drive using n8n workflows.
+AI-powered TikTok video analysis system that automatically generates metadata, transcriptions, identifies music, and stores videos in Google Drive using n8n workflows and Google Cloud Functions.
 
 [![Status](https://img.shields.io/badge/status-working-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
@@ -15,16 +15,74 @@ This project processes TikTok videos to generate comprehensive metadata includin
 - **Visual Analysis** (via GPT-4 Vision)
 - **Music Recognition** (via ACRCloud - identifies songs with confidence scoring)
 - **Google Drive Storage** (organized video library with descriptive filenames)
+- **Cloud Storage Backup** (videos stored in Google Cloud Storage)
 
 **Processing Time:** ~25-30 seconds per video
 **Cost:** ~$0.017 per video (target: <$0.06)
 
+## Architecture
+
+The system uses a two-tier architecture to handle large video files efficiently:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         n8n Cloud                                │
+│  (Orchestration - handles URLs only, no large binaries)         │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Google Cloud Function                          │
+│  (Downloads videos, uploads to Cloud Storage, returns URLs)     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Google Cloud Storage                           │
+│  (Temporary storage with public URLs)                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Why Cloud Function?
+
+- **n8n Memory Limits:** n8n Cloud has ~256MB memory limit per execution
+- **Large Video Files:** TikTok videos can exceed this limit
+- **Solution:** Cloud Function handles all binary operations, n8n only works with URLs
+
+### Workflow Structure
+
+```
+Webhook Trigger
+    │
+    ▼
+Cloud Function Download ────────────────────────────────────┐
+    │ (downloads video, uploads to Cloud Storage)           │
+    │                                                        │
+    ├──► Submit Transcription (URL) ──► Poll ──► Merge ◄───┤
+    │                                              ▲        │
+    ├──► Visual Analysis (thumbnail) ─────────────┘        │
+    │                                                        │
+    └──► Download Audio (MP3) ──► ACRCloud ────────────────►│
+                                                             │
+                                         Download Video ◄───┘
+                                              │
+                                              ▼
+                                       Upload to GDrive
+                                              │
+                                              ▼
+                                       Format Output
+                                              │
+                                              ▼
+                                    Respond to Webhook
+```
+
 ## Features
 
 ### Working
-- End-to-end video processing via n8n workflows
+- End-to-end video processing via n8n + Cloud Function
+- **Cloud Function** handles video download and storage (no file size limits)
 - GPT-4 Vision analysis of video cover images
-- **AssemblyAI audio transcription** (96% accuracy, no file limits, faster)
+- **AssemblyAI audio transcription** (96% accuracy, URL-based - no upload needed)
 - **ACRCloud music recognition** with:
   - Multiple song detection per video
   - 70% confidence threshold filtering
@@ -40,29 +98,7 @@ This project processes TikTok videos to generate comprehensive metadata includin
 - RapidAPI Shazam fallback for low-confidence matches
 - Batch processing interface
 - Cost monitoring dashboard
-
-## Architecture
-
-Built with [n8n Cloud](https://n8n.io) - a low-code workflow automation platform.
-
-### Workflow Structure
-
-```
-Webhook Trigger
-    |
-Get Video Info (sub-workflow)
-    |
-    +---> Visual Analysis (GPT-4)
-    +---> Download Video ---> Upload to Google Drive
-    |                    \--> Upload to AssemblyAI ---> Transcription
-    +---> Download Audio ---> ACRCloud Music Recognition
-    |
-Merge All Results
-    |
-Generate Metadata (GPT-4 Mini)
-    |
-Format & Return JSON
-```
+- Gemini 1.5 Pro for full video analysis (not just cover image)
 
 ## Output Format
 
@@ -72,15 +108,12 @@ Format & Return JSON
   "description": "Watch this adorable Pomeranian as it joyfully lounges on a boat deck...",
   "tags": ["dogs", "Pomeranian", "boat", "relaxation", "outdoor adventure"],
   "transcription": "Full AssemblyAI transcription of spoken content...",
-  "video_url": "https://www.tiktok.com/@username/video/123456",
+  "video_url": "https://storage.googleapis.com/video-processor-temp-rhe/videos/...",
   "video_id": "123456",
   "author": "username",
   "duration": 10,
+  "source": "tiktok",
   "music": {
-    "tiktok": {
-      "title": "original sound - artist",
-      "artist": "artist"
-    },
     "recognized_songs": [
       {
         "title": "Song Title",
@@ -103,6 +136,12 @@ Format & Return JSON
     "file_name": "Video Title Up To 80 Characters - Username.mp4",
     "file_url": "https://drive.google.com/file/d/..."
   },
+  "cloud_storage": {
+    "video_url": "https://storage.googleapis.com/video-processor-temp-rhe/videos/...",
+    "audio_url": "https://storage.googleapis.com/video-processor-temp-rhe/videos/...",
+    "video_size_bytes": 2953029,
+    "audio_size_bytes": 182451
+  },
   "processed_at": "2025-12-22T06:38:00.000Z"
 }
 ```
@@ -120,6 +159,7 @@ Format & Return JSON
 ### Prerequisites
 
 - n8n Cloud account (https://n8n.io)
+- Google Cloud account with billing enabled
 - OpenAI API key (GPT-4, GPT-4 Mini access)
 - AssemblyAI API key (audio transcription)
 - ACRCloud account (music recognition)
@@ -128,21 +168,24 @@ Format & Return JSON
 
 ### Configuration
 
-1. **Import n8n Workflows**
-   - Import workflows from `workflows/` folder
+1. **Deploy Cloud Function**
+   - See [Cloud Function Setup](notes/CLOUD-FUNCTION-SETUP.md)
+   - Function URL: `https://us-central1-video-processor-rhe.cloudfunctions.net/video-downloader`
+
+2. **Import n8n Workflow**
+   - Import `workflows/TikTok_Complete_Processor.json`
    - Configure credentials in n8n:
      - OpenAI API
      - AssemblyAI API (Header Auth)
      - Google Drive OAuth2
-     - RapidAPI Header Auth
 
-2. **ACRCloud Setup**
+3. **ACRCloud Setup**
    - Create account at [ACRCloud](https://www.acrcloud.com/)
    - Get Access Key and Access Secret
    - Credentials are configured in the workflow's Code node
 
-3. **Activate Workflows**
-   - Main: TikTok Video Complete Processor
+4. **Activate Workflow**
+   - Activate: TikTok Video Complete Processor
 
 ## Usage
 
@@ -161,6 +204,7 @@ See [notes/SAMPLE-OUTPUT.md](notes/SAMPLE-OUTPUT.md) for a complete example with
 ## Documentation
 
 - **[Workflows Documentation](workflows/README.md)** - Detailed workflow structure and configuration
+- **[Cloud Function Setup](notes/CLOUD-FUNCTION-SETUP.md)** - Google Cloud Function deployment guide
 - **[Project Notes](notes/README.md)** - Project status, architecture, and requirements
 - **[Sample Output](notes/SAMPLE-OUTPUT.md)** - Real example with quality assessment
 
@@ -175,7 +219,9 @@ See [notes/SAMPLE-OUTPUT.md](notes/SAMPLE-OUTPUT.md) for a complete example with
 | AssemblyAI (transcription) | ~$0.005 |
 | ACRCloud (music recognition) | ~$0.001 |
 | GPT-4 Mini (metadata) | ~$0.001 |
+| Cloud Function | ~$0.0004 |
 | RapidAPI (TikTok data) | Included |
+| Google Cloud Storage | Minimal |
 | Google Drive storage | Included |
 
 **Budget:** $50 for testing (~2,940 videos at actual rate)
@@ -207,12 +253,33 @@ See [notes/SAMPLE-OUTPUT.md](notes/SAMPLE-OUTPUT.md) for a complete example with
 - Play offset in original song (milliseconds)
 - Streaming IDs (Spotify, Apple Music, Deezer)
 
+## Infrastructure
+
+### Google Cloud Resources
+
+| Resource | Details |
+|----------|---------|
+| Project | `video-processor-rhe` |
+| Cloud Function | `video-downloader` (Gen 2, Python 3.11) |
+| Storage Bucket | `video-processor-temp-rhe` |
+| Region | `us-central1` |
+| Memory | 512MB |
+| Timeout | 540s (9 minutes) |
+
+### n8n Cloud
+
+| Resource | Details |
+|----------|---------|
+| Workflow | TikTok Video Complete Processor |
+| Webhook | `/webhook/analyze-video-complete` |
+
 ## Known Limitations
 
 1. **Visual Analysis:** Based on cover image only (not full video frames)
 2. **Transcription:** May be empty for music-only videos (expected)
 3. **Music Recognition:** May not identify indie/original tracks not in ACRCloud's database
 4. **Play Offset:** Shows position in matched song, not TikTok video timestamp
+5. **RapidAPI Rate Limits:** TikTok API may rate limit Cloud Function IPs temporarily
 
 ## Tag Guidelines
 
@@ -242,8 +309,9 @@ MIT License - See [LICENSE](LICENSE) for details
 - Transcription by [AssemblyAI](https://www.assemblyai.com)
 - Music recognition by [ACRCloud](https://www.acrcloud.com)
 - Video data via [RapidAPI TikTok endpoint](https://rapidapi.com)
+- Cloud infrastructure by [Google Cloud](https://cloud.google.com)
 
 ---
 
 **Last Updated:** December 22, 2025
-**Status:** Working end-to-end with ACRCloud music recognition
+**Status:** Working end-to-end with Cloud Function architecture
