@@ -14,7 +14,7 @@ from datetime import timedelta
 # Configuration
 BUCKET_NAME = os.environ.get('GCS_BUCKET', 'video-processor-temp-rhe')
 SCOPES = ['https://www.googleapis.com/auth/cloud-platform']
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyBfLzyYXcOxHYJjcx21NOuOqfl0FMDLSwE')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')  # Required: set via Cloud Function environment variable
 
 
 def get_storage_client():
