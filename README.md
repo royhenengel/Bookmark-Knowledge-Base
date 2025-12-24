@@ -156,8 +156,21 @@ gcloud functions deploy webpage-enricher \
 
 ### Configure n8n
 1. Import workflows from `workflows/`
-2. Configure credentials (Notion, Raindrop, OpenAI, AssemblyAI)
+2. Configure credentials (Notion, OpenAI, AssemblyAI)
 3. Activate workflows
+
+### Configure Notion Automation
+Set up automatic processing for new bookmarks:
+
+1. Open your **Resources** database in Notion
+2. Click `⚡` (Automations) → **+ New automation**
+3. Set trigger: **When page is added**
+4. Add action: **Send webhook**
+   - URL: `https://royhen.app.n8n.cloud/webhook/process-bookmark`
+   - Body: Include `Link` and `id` properties
+5. Save and enable
+
+New bookmarks are now automatically enriched with AI summaries, titles, and metadata.
 
 ## Documentation
 
@@ -193,4 +206,4 @@ MIT License - See [LICENSE](LICENSE)
 
 ---
 
-**Last Updated:** December 23, 2025
+**Last Updated:** December 24, 2025

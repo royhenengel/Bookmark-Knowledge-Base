@@ -13,12 +13,39 @@ Routes URLs to appropriate Cloud Function based on content type:
 - Video URLs (TikTok, YouTube, etc.) → `video-enricher` Cloud Function
 - Webpage URLs (articles, products, etc.) → `webpage-enricher` Cloud Function
 
-**Usage:**
+**Triggers:**
+- Notion Database Automation (recommended)
+- Direct webhook call
+
+**Manual Usage:**
 ```bash
 curl -X POST https://royhen.app.n8n.cloud/webhook/process-bookmark \
   -H 'Content-Type: application/json' \
-  -d '{"url":"https://example.com/article"}'
+  -d '{"url":"https://example.com/article", "notion_page_id":"optional-page-id"}'
 ```
+
+---
+
+## Notion Automation Setup
+
+To automatically process new bookmarks added to Notion:
+
+1. Open your **Resources** database in Notion
+2. Click the `⚡` button (or `...` → **Automations**)
+3. Click **+ New automation**
+4. Configure the trigger:
+   - **When:** Page added to Resources
+5. Click **+ Add action** → **Send webhook**
+6. Configure the webhook:
+   - **URL:** `https://royhen.app.n8n.cloud/webhook/process-bookmark`
+   - **Body:** Include page properties (Link, id)
+7. Save and enable the automation
+
+The workflow will:
+- Extract the URL from the `Link` property
+- Detect content type (video, article, product, code)
+- Enrich with AI analysis
+- Update the Notion page with: Title, Type, AI Summary, Domain, Author, Status
 
 ---
 
@@ -74,8 +101,7 @@ curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
 | OpenAI API | Video Processor | GPT-4 Mini metadata |
 | Google Drive OAuth2 | Video Processor | Video uploads |
 | ACRCloud | Video Processor | Music recognition |
-| Notion | Bookmark Processor | Database updates (future) |
-| Raindrop | Bookmark Processor | Sync (future) |
+| Notion API | Bookmark Processor | Database updates |
 
 ## n8n Workflow IDs
 
@@ -93,4 +119,4 @@ curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
 
 ---
 
-**Last Updated:** December 23, 2025
+**Last Updated:** December 24, 2025

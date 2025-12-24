@@ -3,45 +3,6 @@
   "nodes": [
     {
       "parameters": {
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyMinute"
-            }
-          ]
-        },
-        "event": "pageAddedToDatabase",
-        "databaseId": {
-          "__rl": true,
-          "value": "2cf4df89-4a69-819f-941c-f3f8703ef620",
-          "mode": "id"
-        },
-        "options": {}
-      },
-      "id": "notion-trigger",
-      "name": "New Bookmark in Notion",
-      "type": "n8n-nodes-base.notionTrigger",
-      "typeVersion": 1,
-      "position": [-200, -200],
-      "credentials": {
-        "notionApi": {
-          "id": "vGGxyUaNL70rqYcQ",
-          "name": "Notion account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract URL and page ID from Notion trigger\nconst page = $input.first().json;\n\n// Get URL from Link property\nconst url = page.properties?.Link?.url || page.properties?.URL?.url;\nconst notionPageId = page.id;\n\nif (!url) {\n  throw new Error(\"No URL found in Notion page Link property\");\n}\n\n// Video URL patterns\nconst videoPatterns = [\"tiktok.com\", \"youtube.com\", \"youtu.be\", \"vimeo.com\", \"twitch.tv\"];\nconst isVideo = videoPatterns.some(pattern => url.toLowerCase().includes(pattern));\n\n// Extract domain\nconst domainMatch = url.match(/^https?:\\/\\/(?:www\\.)?([^\\/:]+)/);\nconst domain = domainMatch ? domainMatch[1] : 'unknown';\n\nreturn {\n  url,\n  notionPageId,\n  domain,\n  isVideo,\n  processorUrl: isVideo \n    ? \"https://us-central1-video-processor-rhe.cloudfunctions.net/video-downloader\"\n    : \"https://us-central1-video-processor-rhe.cloudfunctions.net/webpage-enricher\",\n  source: 'notion-trigger'\n};"
-      },
-      "id": "extract-from-notion",
-      "name": "Extract from Notion",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [0, -200]
-    },
-    {
-      "parameters": {
         "httpMethod": "POST",
         "path": "process-bookmark",
         "responseMode": "responseNode",
@@ -56,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract URL and determine type from webhook\nconst url = $input.first().json.url || $input.first().json.body?.url;\nconst notionPageId = $input.first().json.notion_page_id || $input.first().json.body?.notion_page_id;\n\nif (!url) {\n  throw new Error(\"No URL provided\");\n}\n\n// Video URL patterns\nconst videoPatterns = [\"tiktok.com\", \"youtube.com\", \"youtu.be\", \"vimeo.com\", \"twitch.tv\"];\nconst isVideo = videoPatterns.some(pattern => url.toLowerCase().includes(pattern));\n\n// Extract domain using regex (URL constructor not available in n8n sandbox)\nconst domainMatch = url.match(/^https?:\\/\\/(?:www\\.)?([^\\/:]+)/);\nconst domain = domainMatch ? domainMatch[1] : 'unknown';\n\nreturn {\n  url,\n  notionPageId,\n  domain,\n  isVideo,\n  processorUrl: isVideo \n    ? \"https://us-central1-video-processor-rhe.cloudfunctions.net/video-downloader\"\n    : \"https://us-central1-video-processor-rhe.cloudfunctions.net/webpage-enricher\",\n  source: 'webhook'\n};"
+        "jsCode": "// Extract URL and determine type from webhook\n// Supports: direct API calls, Notion automation webhooks\nconst data = $input.first().json;\nconst body = data.body || data;\n\n// Get URL - check multiple possible locations\nconst url = body.url || body.Link || body.properties?.Link?.url || data.url;\n\n// Get Notion page ID - from direct call or Notion automation\nconst notionPageId = body.notion_page_id || body.id || body.page_id || data.notion_page_id;\n\nif (!url) {\n  throw new Error(\"No URL provided. Expected 'url' or 'Link' property.\");\n}\n\n// Video URL patterns\nconst videoPatterns = [\"tiktok.com\", \"youtube.com\", \"youtu.be\", \"vimeo.com\", \"twitch.tv\"];\nconst isVideo = videoPatterns.some(pattern => url.toLowerCase().includes(pattern));\n\n// Extract domain using regex (URL constructor not available in n8n sandbox)\nconst domainMatch = url.match(/^https?:\\/\\/(?:www\\.)?([^\\/:]+)/);\nconst domain = domainMatch ? domainMatch[1] : 'unknown';\n\nreturn {\n  url,\n  notionPageId,\n  domain,\n  isVideo,\n  processorUrl: isVideo \n    ? \"https://us-central1-video-processor-rhe.cloudfunctions.net/video-downloader\"\n    : \"https://us-central1-video-processor-rhe.cloudfunctions.net/webpage-enricher\"\n};"
       },
       "id": "detect-type",
       "name": "Detect URL Type",
@@ -83,7 +44,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Get result from processor - handle wrapped data field\nlet rawResult = $input.first().json;\nlet result = rawResult;\n\n// If data is wrapped in a 'data' field as string, parse it\nif (rawResult.data && typeof rawResult.data === 'string') {\n  result = JSON.parse(rawResult.data);\n}\n\nconst detectData = $('Detect URL Type').item.json;\n\n// Build normalized output\nconst output = {\n  notionPageId: detectData.notionPageId,\n  url: result.url || detectData.url,\n  domain: result.domain || detectData.domain,\n  title: result.title,\n  type: detectData.isVideo ? \"video\" : (result.type || \"article\"),\n  ai_summary: result.ai_summary || result.description,\n  ai_analysis: result.ai_analysis || result.gemini_analysis?.analysis,\n  author: result.author,\n  processed_at: result.processed_at || new Date().toISOString()\n};\n\n// Video-specific fields\nif (detectData.isVideo && result.gemini_analysis) {\n  output.transcript = result.transcription;\n  output.visual_analysis = result.gemini_analysis?.analysis;\n  output.music = result.music;\n  output.google_drive = result.google_drive;\n  output.duration = result.duration;\n}\n\n// Webpage-specific fields\nif (result.reading_time) {\n  output.reading_time = result.reading_time;\n}\nif (result.price !== undefined && result.price !== null) {\n  output.price = result.price;\n  output.currency = result.currency;\n}\nif (result.code_snippets?.length) {\n  output.code_snippets = result.code_snippets;\n}\nif (result.error) {\n  output.error = result.error;\n}\n\nreturn output;"
+        "jsCode": "// Get result from processor - handle wrapped data field\nlet rawResult = $input.first().json;\nlet result = rawResult;\n\n// If data is wrapped in a 'data' field as string, parse it\nif (rawResult.data && typeof rawResult.data === 'string') {\n  result = JSON.parse(rawResult.data);\n}\n\n// Get source data from Detect URL Type node\nconst detectData = $('Detect URL Type').item.json;\n\n// Build normalized output\nconst output = {\n  notionPageId: detectData.notionPageId,\n  url: result.url || detectData.url,\n  domain: result.domain || detectData.domain,\n  title: result.title,\n  type: detectData.isVideo ? \"video\" : (result.type || \"article\"),\n  ai_summary: result.ai_summary || result.description,\n  ai_analysis: result.ai_analysis || result.gemini_analysis?.analysis,\n  author: result.author,\n  processed_at: result.processed_at || new Date().toISOString()\n};\n\n// Video-specific fields\nif (detectData.isVideo && result.gemini_analysis) {\n  output.transcript = result.transcription;\n  output.visual_analysis = result.gemini_analysis?.analysis;\n  output.music = result.music;\n  output.google_drive = result.google_drive;\n  output.duration = result.duration;\n}\n\n// Webpage-specific fields\nif (result.reading_time) {\n  output.reading_time = result.reading_time;\n}\nif (result.price !== undefined && result.price !== null) {\n  output.price = result.price;\n  output.currency = result.currency;\n}\nif (result.code_snippets?.length) {\n  output.code_snippets = result.code_snippets;\n}\nif (result.error) {\n  output.error = result.error;\n}\n\nreturn output;"
       },
       "id": "normalize-results",
       "name": "Normalize Results",
@@ -151,8 +112,8 @@
       "position": [1320, -100],
       "credentials": {
         "notionApi": {
-          "id": "zOh22ge1kZkwi6P5",
-          "name": "NotionAuth"
+          "id": "vGGxyUaNL70rqYcQ",
+          "name": "Notion account"
         }
       }
     },
@@ -190,28 +151,6 @@
     }
   ],
   "connections": {
-    "New Bookmark in Notion": {
-      "main": [
-        [
-          {
-            "node": "Extract from Notion",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract from Notion": {
-      "main": [
-        [
-          {
-            "node": "Call Processor",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Webhook": {
       "main": [
         [
