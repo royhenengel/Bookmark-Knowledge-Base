@@ -30,7 +30,13 @@ from datetime import datetime
 
 # Configuration
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+SPOTIFY_CLIENT_ID = os.environ.get('SPOTIFY_CLIENT_ID')
+SPOTIFY_CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET')
+ASSEMBLYAI_API_KEY = os.environ.get('ASSEMBLYAI_API_KEY')
 USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+# Spotify API token cache
+_spotify_token_cache = {'token': None, 'expires_at': 0}
 
 # URL patterns for type detection
 VIDEO_PATTERNS = ['youtube.com', 'youtu.be', 'vimeo.com', 'tiktok.com', 'twitch.tv']
@@ -40,8 +46,107 @@ PRODUCT_PATTERNS = ['amazon.', 'ebay.', 'etsy.com', 'shopify.', 'aliexpress.', '
 PODCAST_PATTERNS = ['spotify.com/episode', 'podcasts.apple.com', 'overcast.fm', 'pocketcasts.com']
 
 
+def get_spotify_access_token() -> str:
+    """Get Spotify API access token using Client Credentials flow."""
+    import time
+
+    # Check cache first
+    if _spotify_token_cache['token'] and time.time() < _spotify_token_cache['expires_at']:
+        return _spotify_token_cache['token']
+
+    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+        return None
+
+    try:
+        import base64
+        auth_string = f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}"
+        auth_bytes = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
+
+        response = requests.post(
+            'https://accounts.spotify.com/api/token',
+            headers={
+                'Authorization': f'Basic {auth_bytes}',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            data={'grant_type': 'client_credentials'},
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # Cache the token (expires_in is typically 3600 seconds)
+        _spotify_token_cache['token'] = data['access_token']
+        _spotify_token_cache['expires_at'] = time.time() + data.get('expires_in', 3600) - 60  # 60s buffer
+
+        return data['access_token']
+    except Exception as e:
+        print(f"Spotify auth error: {e}")
+        return None
+
+
+def extract_spotify_episode_id(url: str) -> str:
+    """Extract episode ID from Spotify URL."""
+    import re
+    # Matches: open.spotify.com/episode/XXXXXX or spotify.com/episode/XXXXXX
+    match = re.search(r'spotify\.com/episode/([a-zA-Z0-9]+)', url)
+    return match.group(1) if match else None
+
+
+def fetch_spotify_episode(url: str) -> dict:
+    """Fetch rich metadata from Spotify Web API for podcast episodes."""
+    episode_id = extract_spotify_episode_id(url)
+    if not episode_id:
+        return {'success': False, 'error': 'Could not extract episode ID from URL'}
+
+    token = get_spotify_access_token()
+    if not token:
+        # Fall back to oEmbed if no API credentials
+        return fetch_spotify_oembed(url)
+
+    try:
+        response = requests.get(
+            f'https://api.spotify.com/v1/episodes/{episode_id}',
+            headers={'Authorization': f'Bearer {token}'},
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # Extract show info
+        show = data.get('show', {})
+
+        # Format duration (ms to minutes)
+        duration_ms = data.get('duration_ms', 0)
+        duration_minutes = round(duration_ms / 60000) if duration_ms else None
+
+        return {
+            'success': True,
+            'title': data.get('name'),
+            'description': data.get('description') or data.get('html_description'),
+            'thumbnail_url': data.get('images', [{}])[0].get('url') if data.get('images') else None,
+            'release_date': data.get('release_date'),
+            'duration_minutes': duration_minutes,
+            'show_name': show.get('name'),
+            'show_description': show.get('description'),
+            'publisher': show.get('publisher'),
+            'total_episodes': show.get('total_episodes'),
+            'explicit': data.get('explicit', False),
+            'language': data.get('language'),
+            'type': 'podcast',
+            'provider_name': 'Spotify'
+        }
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            return {'success': False, 'error': 'Episode not found'}
+        return {'success': False, 'error': f'Spotify API error: {e.response.status_code}'}
+    except Exception as e:
+        # Fall back to oEmbed on any error
+        print(f"Spotify API error, falling back to oEmbed: {e}")
+        return fetch_spotify_oembed(url)
+
+
 def fetch_spotify_oembed(url: str) -> dict:
-    """Fetch metadata from Spotify oEmbed API for podcast episodes."""
+    """Fetch metadata from Spotify oEmbed API for podcast episodes (fallback)."""
     try:
         oembed_url = f"https://open.spotify.com/oembed?url={url}"
         response = requests.get(oembed_url, timeout=10)
@@ -54,6 +159,165 @@ def fetch_spotify_oembed(url: str) -> dict:
             'provider_name': data.get('provider_name', 'Spotify'),
             'type': 'podcast',
             'success': True
+        }
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def search_podcast_itunes(show_name: str) -> dict:
+    """Search for a podcast's RSS feed using the iTunes Search API."""
+    try:
+        # Clean up show name for search
+        search_term = show_name.replace("'", "").replace('"', '')
+
+        response = requests.get(
+            'https://itunes.apple.com/search',
+            params={
+                'term': search_term,
+                'media': 'podcast',
+                'limit': 5
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        results = data.get('results', [])
+        if not results:
+            return {'success': False, 'error': 'No podcasts found'}
+
+        # Find best match - prefer exact name match
+        best_match = None
+        for result in results:
+            if result.get('collectionName', '').lower() == show_name.lower():
+                best_match = result
+                break
+
+        # Fall back to first result
+        if not best_match:
+            best_match = results[0]
+
+        return {
+            'success': True,
+            'rss_url': best_match.get('feedUrl'),
+            'podcast_name': best_match.get('collectionName'),
+            'artist_name': best_match.get('artistName'),
+            'artwork_url': best_match.get('artworkUrl600')
+        }
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def find_episode_in_rss(rss_url: str, episode_title: str, duration_minutes: int = None) -> dict:
+    """Find a specific episode in an RSS feed and return its audio URL."""
+    import feedparser
+    from difflib import SequenceMatcher
+
+    try:
+        # Parse RSS feed
+        feed = feedparser.parse(rss_url)
+
+        if not feed.entries:
+            return {'success': False, 'error': 'No episodes found in RSS feed'}
+
+        # Normalize search title
+        search_title = episode_title.lower().strip()
+
+        best_match = None
+        best_score = 0
+
+        for entry in feed.entries:
+            entry_title = entry.get('title', '').lower().strip()
+
+            # Calculate similarity score
+            score = SequenceMatcher(None, search_title, entry_title).ratio()
+
+            # Boost score if duration matches (within 2 minutes)
+            if duration_minutes:
+                entry_duration = None
+                # Try to get duration from itunes:duration
+                if hasattr(entry, 'itunes_duration'):
+                    dur = entry.itunes_duration
+                    if ':' in str(dur):
+                        parts = str(dur).split(':')
+                        if len(parts) == 2:
+                            entry_duration = int(parts[0])
+                        elif len(parts) == 3:
+                            entry_duration = int(parts[0]) * 60 + int(parts[1])
+                    else:
+                        try:
+                            entry_duration = int(dur) // 60
+                        except:
+                            pass
+
+                if entry_duration and abs(entry_duration - duration_minutes) <= 2:
+                    score += 0.2  # Boost for matching duration
+
+            if score > best_score:
+                best_score = score
+                best_match = entry
+
+        # Require at least 50% match
+        if best_score < 0.5:
+            return {'success': False, 'error': f'No matching episode found (best score: {best_score:.2f})'}
+
+        # Extract audio URL from enclosures
+        audio_url = None
+        if best_match.get('enclosures'):
+            for enc in best_match.enclosures:
+                if enc.get('type', '').startswith('audio/'):
+                    audio_url = enc.get('href') or enc.get('url')
+                    break
+
+        # Fallback to links
+        if not audio_url and best_match.get('links'):
+            for link in best_match.links:
+                if link.get('type', '').startswith('audio/'):
+                    audio_url = link.get('href')
+                    break
+
+        if not audio_url:
+            return {'success': False, 'error': 'No audio URL found in episode'}
+
+        return {
+            'success': True,
+            'audio_url': audio_url,
+            'episode_title': best_match.get('title'),
+            'match_score': best_score
+        }
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def transcribe_audio_url(audio_url: str) -> dict:
+    """Transcribe audio from URL using AssemblyAI."""
+    if not ASSEMBLYAI_API_KEY:
+        return {'success': False, 'error': 'ASSEMBLYAI_API_KEY not configured'}
+
+    try:
+        import assemblyai as aai
+
+        aai.settings.api_key = ASSEMBLYAI_API_KEY
+
+        # Configure transcription
+        config = aai.TranscriptionConfig(
+            speech_model=aai.SpeechModel.best,
+            punctuate=True,
+            format_text=True,
+        )
+
+        # Create transcriber and transcribe
+        transcriber = aai.Transcriber(config=config)
+        transcript = transcriber.transcribe(audio_url)
+
+        if transcript.status == aai.TranscriptStatus.error:
+            return {'success': False, 'error': transcript.error}
+
+        return {
+            'success': True,
+            'text': transcript.text,
+            'confidence': transcript.confidence,
+            'audio_duration_seconds': transcript.audio_duration
         }
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -424,27 +688,45 @@ def enrich_webpage(request):
         parsed_url = urlparse(url)
         domain = parsed_url.netloc.replace('www.', '')
 
-        # Special handling for Spotify podcast episodes - use oEmbed API
+        # Special handling for Spotify podcast episodes - use Web API (with oEmbed fallback)
         if 'spotify.com/episode' in url.lower():
-            spotify_data = fetch_spotify_oembed(url)
+            spotify_data = fetch_spotify_episode(url)
             if spotify_data.get('success'):
-                # Generate AI analysis from the title (since we can't get full content)
+                # Build content for AI analysis - much richer with Web API data
+                content_parts = []
+                if spotify_data.get('title'):
+                    content_parts.append(f"Episode: {spotify_data['title']}")
+                if spotify_data.get('show_name'):
+                    content_parts.append(f"Show: {spotify_data['show_name']}")
+                if spotify_data.get('publisher'):
+                    content_parts.append(f"Publisher: {spotify_data['publisher']}")
+                if spotify_data.get('description'):
+                    content_parts.append(f"Description: {spotify_data['description']}")
+                if spotify_data.get('show_description'):
+                    content_parts.append(f"Show Description: {spotify_data['show_description']}")
+                if spotify_data.get('duration_minutes'):
+                    content_parts.append(f"Duration: {spotify_data['duration_minutes']} minutes")
+
+                content_for_ai = '\n'.join(content_parts)
+
+                # Generate AI analysis with rich content
                 ai_result = {'title': spotify_data['title'], 'summary': None, 'analysis': None}
-                if not options.get('skip_ai', False) and GEMINI_API_KEY and spotify_data['title']:
+                if not options.get('skip_ai', False) and GEMINI_API_KEY and content_for_ai:
                     try:
                         genai.configure(api_key=GEMINI_API_KEY)
                         model = genai.GenerativeModel('gemini-2.0-flash')
-                        prompt = f"""Analyze this podcast episode based on its title:
+                        prompt = f"""Analyze this podcast episode:
 
-Title: {spotify_data['title']}
+{content_for_ai}
+
 Platform: Spotify
 
-Provide a brief analysis with:
-1. A 2-sentence summary of what this episode is likely about
+Provide:
+1. A 2-3 sentence summary of what this episode covers
 2. Key topics and who would find this useful
 
 Respond in this exact JSON format (both values must be plain text strings, not arrays or objects):
-{{"summary": "Your 2-sentence summary here", "analysis": "Key topics: topic1, topic2, topic3. Target audience: description of who would find this useful."}}"""
+{{"summary": "Your 2-3 sentence summary here", "analysis": "Key topics: topic1, topic2, topic3. Target audience: description of who would find this useful."}}"""
                         response = model.generate_content(prompt)
                         json_match = re.search(r'\{[\s\S]*\}', response.text.strip())
                         if json_match:
@@ -453,7 +735,6 @@ Respond in this exact JSON format (both values must be plain text strings, not a
                             # Ensure analysis is a string
                             analysis = parsed.get('analysis')
                             if isinstance(analysis, dict):
-                                # Convert object to string if Gemini returns structured data
                                 parts = []
                                 if 'key_topics' in analysis:
                                     parts.append(f"Key topics: {', '.join(analysis['key_topics']) if isinstance(analysis['key_topics'], list) else analysis['key_topics']}")
@@ -464,29 +745,72 @@ Respond in this exact JSON format (both values must be plain text strings, not a
                     except Exception as e:
                         ai_result['error'] = str(e)
 
+                # Use show name + publisher as author if available
+                author = spotify_data.get('publisher') or spotify_data.get('show_name') or spotify_data.get('provider_name', 'Spotify')
+
+                # Try to get transcription via RSS feed
+                transcription = None
+                transcription_error = None
+
+                if spotify_data.get('show_name') and spotify_data.get('title'):
+                    # Step 1: Find RSS feed via iTunes
+                    rss_result = search_podcast_itunes(spotify_data['show_name'])
+
+                    if rss_result.get('success') and rss_result.get('rss_url'):
+                        # Step 2: Find episode in RSS
+                        episode_result = find_episode_in_rss(
+                            rss_result['rss_url'],
+                            spotify_data['title'],
+                            spotify_data.get('duration_minutes')
+                        )
+
+                        if episode_result.get('success') and episode_result.get('audio_url'):
+                            # Step 3: Transcribe audio
+                            transcription_result = transcribe_audio_url(episode_result['audio_url'])
+
+                            if transcription_result.get('success'):
+                                transcription = transcription_result.get('text')
+                            else:
+                                transcription_error = f"Transcription failed: {transcription_result.get('error')}"
+                        else:
+                            transcription_error = f"Episode not found in RSS: {episode_result.get('error')}"
+                    else:
+                        transcription_error = f"RSS feed not found: {rss_result.get('error')}"
+
                 response_data = {
                     'url': url,
                     'domain': domain,
                     'type': 'podcast',
                     'title': spotify_data['title'],
-                    'author': spotify_data['provider_name'],
-                    'published_date': None,
-                    'main_image': spotify_data['thumbnail_url'],
-                    'description': None,
-                    'reading_time': None,
+                    'author': author,
+                    'published_date': spotify_data.get('release_date'),
+                    'main_image': spotify_data.get('thumbnail_url'),
+                    'description': spotify_data.get('description'),
+                    'reading_time': spotify_data.get('duration_minutes'),  # Use duration as "reading time" for podcasts
                     'price': None,
                     'currency': None,
                     'code_snippets': [],
                     'ai_summary': ai_result.get('summary'),
                     'ai_analysis': ai_result.get('analysis'),
                     'processed_at': datetime.utcnow().isoformat() + 'Z',
+                    # Extra Spotify-specific fields
+                    'show_name': spotify_data.get('show_name'),
+                    'show_description': spotify_data.get('show_description'),
+                    'episode_duration_minutes': spotify_data.get('duration_minutes'),
+                    # Transcription
+                    'transcription': transcription,
                 }
+
+                # Collect errors
+                errors = []
                 if ai_result.get('error'):
-                    response_data['error'] = {
-                        'stage': 'ai_analysis',
-                        'message': ai_result['error'],
-                        'recoverable': True
-                    }
+                    errors.append({'stage': 'ai_analysis', 'message': ai_result['error'], 'recoverable': True})
+                if transcription_error:
+                    errors.append({'stage': 'transcription', 'message': transcription_error, 'recoverable': True})
+
+                if errors:
+                    response_data['errors'] = errors
+
                 return (json.dumps(response_data), 200, headers)
 
         # Fetch the webpage

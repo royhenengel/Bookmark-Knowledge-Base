@@ -2,6 +2,6 @@ functions-framework==3.*
 google-auth==2.*
 google-cloud-storage>=2.14.0
 google-generativeai>=0.8.3
-yt-dlp>=2024.1.1
+yt-dlp>=2024.12.1
 requests>=2.31.0
 assemblyai>=0.35.0

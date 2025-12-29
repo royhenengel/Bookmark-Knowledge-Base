@@ -34,12 +34,205 @@ def get_storage_client():
         return storage.Client()
 
 
+def is_spotify_podcast(url):
+    """Check if URL is a Spotify podcast episode."""
+    return 'spotify.com/episode' in url.lower()
+
+
+def get_spotify_metadata(url):
+    """Get podcast metadata from Spotify oEmbed API."""
+    import requests
+    try:
+        oembed_url = f"https://open.spotify.com/oembed?url={url}"
+        response = requests.get(oembed_url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return {
+            'title': data.get('title', 'Unknown Episode'),
+            'thumbnail': data.get('thumbnail_url'),
+            'provider': data.get('provider_name', 'Spotify'),
+            'success': True
+        }
+    except Exception as e:
+        print(f"Spotify oEmbed error: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+def search_youtube_with_api(query, max_results=5):
+    """Search YouTube using the YouTube Data API (falls back from yt-dlp)."""
+    import requests
+
+    api_key = os.environ.get('GEMINI_API_KEY')  # Try Google API key
+    if not api_key:
+        return None
+
+    try:
+        url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            'part': 'snippet',
+            'q': query,
+            'type': 'video',
+            'maxResults': max_results,
+            'key': api_key,
+            'videoDuration': 'long',  # Filter for videos > 20 min (podcasts)
+        }
+        response = requests.get(url, params=params, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get('items', [])
+            if items:
+                video_id = items[0]['id']['videoId']
+                title = items[0]['snippet']['title']
+                print(f"YouTube API found: {title}")
+                return f"https://youtube.com/watch?v={video_id}"
+        else:
+            print(f"YouTube API error: {response.status_code} - {response.text[:200]}")
+    except Exception as e:
+        print(f"YouTube API search failed: {e}")
+    return None
+
+
+def search_youtube_for_podcast(episode_title, show_name=None, max_results=10):
+    """Search YouTube for a podcast episode by title.
+
+    Returns the best matching YouTube URL or None if not found.
+    """
+    try:
+        print(f"Searching YouTube for: {episode_title}")
+
+        # Clean up title for better search
+        search_query = episode_title
+        # Remove common podcast prefixes
+        for prefix in ['Most Replayed Moment:', 'Ep.', 'Episode', '#']:
+            if search_query.startswith(prefix):
+                search_query = search_query[len(prefix):].strip()
+
+        # Add show name to improve search if available
+        if show_name and show_name not in search_query:
+            search_query = f"{show_name} {search_query}"
+
+        print(f"Search query: {search_query}")
+
+        # Try YouTube Data API first (more reliable in cloud)
+        api_result = search_youtube_with_api(search_query)
+        if api_result:
+            return api_result
+
+        # Fallback to yt-dlp search
+        print("Trying yt-dlp search fallback...")
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'default_search': f'ytsearch{max_results}',
+            # Use same anti-bot measures as download
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android_vr', 'tv_embedded'],
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+            },
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            results = ydl.extract_info(f"ytsearch{max_results}:{search_query}", download=False)
+
+            if results and results.get('entries'):
+                entries = results['entries']
+                print(f"Found {len(entries)} YouTube results")
+
+                # Return first result that looks like it could be the podcast
+                for entry in entries:
+                    if entry and entry.get('id'):
+                        title = entry.get('title', '')
+                        duration = entry.get('duration', 0)
+
+                        # Prefer longer videos (podcasts are usually 10+ minutes)
+                        if duration and duration > 300:  # > 5 minutes
+                            youtube_url = f"https://youtube.com/watch?v={entry['id']}"
+                            print(f"Found matching video: {title} ({duration}s)")
+                            return youtube_url
+
+                # Fallback to first result if no long videos found
+                first_entry = entries[0]
+                if first_entry and first_entry.get('id'):
+                    youtube_url = f"https://youtube.com/watch?v={first_entry['id']}"
+                    print(f"Using first result: {first_entry.get('title')}")
+                    return youtube_url
+
+        print("No YouTube results found")
+        return None
+
+    except Exception as e:
+        print(f"YouTube search error: {e}")
+        return None
+
+
+def download_spotify_podcast(url, tmpdir):
+    """Download Spotify podcast by finding it on YouTube.
+
+    Strategy:
+    1. Get episode metadata from Spotify oEmbed
+    2. Search YouTube for the episode
+    3. Download from YouTube if found
+    """
+    print(f"Processing Spotify podcast: {url}")
+
+    # Get metadata from Spotify
+    spotify_meta = get_spotify_metadata(url)
+    if not spotify_meta.get('success'):
+        raise Exception(f"Failed to get Spotify metadata: {spotify_meta.get('error')}")
+
+    episode_title = spotify_meta['title']
+    show_name = spotify_meta.get('show_name')
+    print(f"Episode title: {episode_title}")
+    print(f"Show name: {show_name}")
+
+    # Search YouTube for this episode - try with show name first, then without
+    youtube_url = search_youtube_for_podcast(episode_title, show_name)
+
+    if not youtube_url:
+        # Try searching with just the title
+        print("No results with show name, trying title only...")
+        youtube_url = search_youtube_for_podcast(episode_title)
+
+    if youtube_url:
+        print(f"Found on YouTube: {youtube_url}")
+        try:
+            # Download from YouTube using existing function
+            result = download_with_ytdlp(youtube_url, tmpdir)
+            # Override some metadata with Spotify info
+            result['source'] = 'spotify_via_youtube'
+            result['original_url'] = url
+            result['spotify_title'] = episode_title
+            result['spotify_thumbnail'] = spotify_meta.get('thumbnail')
+            return result
+        except Exception as e:
+            error_msg = str(e)
+            if 'Sign in to confirm' in error_msg or 'bot' in error_msg.lower():
+                print(f"YouTube download blocked by bot detection: {e}")
+                raise Exception(
+                    f"YouTube download blocked by bot detection. "
+                    f"Try adding a YOUTUBE_COOKIE_FILE or using a residential proxy. "
+                    f"Found video: {youtube_url}"
+                )
+            raise
+    else:
+        # YouTube not found - raise error for now
+        # TODO: Add Podcast Index RSS fallback here
+        raise Exception(f"Could not find '{episode_title}' on YouTube. Podcast Index fallback not yet implemented.")
+
+
 def download_video(url, tmpdir):
-    """Download video - uses RapidAPI for TikTok, yt-dlp for others."""
+    """Download video - handles TikTok, Spotify podcasts, and other sources."""
     import requests
 
     # Detect source
-    if 'tiktok' in url.lower():
+    if is_spotify_podcast(url):
+        return download_spotify_podcast(url, tmpdir)
+    elif 'tiktok' in url.lower():
         return download_tiktok_video(url, tmpdir)
     else:
         return download_with_ytdlp(url, tmpdir)
@@ -183,6 +376,18 @@ def download_with_ytdlp(url, tmpdir):
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
+        # Anti-bot measures for YouTube - try multiple clients
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android_vr', 'tv_embedded'],
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+        },
+        'socket_timeout': 60,
+        'retries': 3,
+        'fragment_retries': 3,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

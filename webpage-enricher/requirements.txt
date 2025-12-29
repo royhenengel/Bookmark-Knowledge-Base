@@ -2,3 +2,5 @@ functions-framework==3.*
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 google-generativeai>=0.8.3
+feedparser>=6.0.0
+assemblyai>=0.35.0
