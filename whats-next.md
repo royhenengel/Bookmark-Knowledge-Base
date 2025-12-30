@@ -88,16 +88,17 @@ Build an AI-powered bookmark enrichment system with bidirectional Notion and Rai
 
 <work_remaining>
 ## High Priority
-1. **Raindrop.io Bidirectional Sync** - NOT IMPLEMENTED
-   - The `Sync Status` property exists in Notion but sync workflows are not built
-   - Need `notion-to-raindrop` workflow
-   - Need `raindrop-to-notion` workflow
-   - Need conflict resolution logic
+1. **Raindrop.io Bidirectional Sync** - MOVED to [notion-workspace](../notion-workspace) repo
+   - See `notion-workspace/docs/raindrop-sync.md` for documentation
+   - Workflow IDs: `LnuuQj3dBVIhY1CP`, `GStAU4AH6QHgQoIx`
 
 ## Medium Priority
-2. **Backlog Processor Workflow** - NOT IMPLEMENTED
-   - Mentioned in ARCHITECTURE.md but not in workflow list
-   - Should batch process unprocessed bookmarks (Status = "Inbox")
+2. **Backlog Processor Workflow** - IMPLEMENTED (Dec 29, 2025)
+   - Workflow ID: `aVKSwnST5LWpUHDI`
+   - Queries Notion for Status = "Inbox" items
+   - Processes in batches (configurable, default 10)
+   - 5-second delay between items (rate limiting)
+   - Run via Manual Trigger in n8n UI
 
 3. **Error Recovery** - Partial
    - Email notifications work
@@ -188,14 +189,13 @@ Build an AI-powered bookmark enrichment system with bidirectional Notion and Rai
 - **Google Drive upload** - Videos saved to "TikTok Videos" folder (fixed Dec 29, 2025)
 
 ## Active Workflows
-- `Bookmark Processor` (21 nodes) - Primary processor
+- `Bookmark Processor` (21 nodes) - Primary processor (tool-agnostic)
 - `Video Processor` (15 nodes) - Video-specific processing
+- `Backlog Processor` (15 nodes) - Batch process Inbox items
 - `GitHub to Notion Sync v3` (18 nodes) - GitHub integration
 - `Notion to GitHub Sync` (8 nodes) - Bidirectional GitHub sync
 
-## Not Yet Implemented
-- Raindrop.io sync (both directions)
-- Backlog processor for bulk processing
+Note: Raindrop sync workflows moved to [notion-workspace](../notion-workspace) repo.
 
 ## Git Status
 - Branch: `main`
@@ -223,17 +223,29 @@ Build an AI-powered bookmark enrichment system with bidirectional Notion and Rai
 
 ## Recommended Next Steps
 
-1. **Implement Raindrop Sync** - Primary missing feature from original spec
-   - Create `notion-to-raindrop` workflow
-   - Create `raindrop-to-notion` workflow
-   - Implement conflict resolution logic
-2. **Build Backlog Processor** - For batch processing unprocessed bookmarks
-   - Query Notion for Status = "Inbox"
-   - Process in batches with rate limiting
+1. **Configure Raindrop Credentials** - REQUIRED for sync to work
+   - Open n8n UI and configure Raindrop OAuth2 on the 4 nodes listed above
+   - Activate the `Raindrop to Notion Sync` workflow
+2. **Test Bidirectional Sync** - Verify the integration
+   - Add bookmark in Raindrop → should appear in Notion and get enriched
+   - Add bookmark in Notion → should sync to Raindrop with enriched data
 3. **Add Error Recovery** - Automatic retry for recoverable errors
+4. **Add Schedule Trigger to Backlog Processor** - Optional daily/weekly auto-run
+
+## Recently Implemented (Dec 30, 2025)
+
+- **Raindrop.io Bidirectional Sync** - Moved to [notion-workspace](../notion-workspace) repo
+  - See `notion-workspace/docs/raindrop-sync.md` for full documentation
+  - Workflow IDs: `LnuuQj3dBVIhY1CP` (Raindrop → Notion), `GStAU4AH6QHgQoIx` (Notion → Raindrop)
+  - Requires Raindrop OAuth2 credential configuration in n8n UI
 
 ## Recently Fixed (Dec 29, 2025)
 
+- **Built Backlog Processor workflow** - Batch process unprocessed bookmarks (Status = "Inbox")
+  - Workflow ID: `aVKSwnST5LWpUHDI` (15 nodes, active)
+  - Queries Notion for Inbox items, processes via Bookmark Processor webhook
+  - Configurable batch size (default 10) and rate limiting (5s delay)
+  - Run via Manual Trigger in n8n UI
 - **Connected Bookmark Processor to Video Processor** - Videos from Notion now properly route through Video Processor workflow, enabling ACRCloud music recognition and Google Drive upload
 - **Fixed data format compatibility** - Updated "Normalize Results" node to handle Video Processor output format:
   - Title: Now uses `generated_metadata.title` (GPT-4o-mini) instead of parsing Gemini analysis

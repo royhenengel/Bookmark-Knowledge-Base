@@ -1,0 +1,964 @@
+{
+  "updatedAt": "2025-12-29T14:03:37.756Z",
+  "createdAt": "2025-12-29T13:59:07.690Z",
+  "id": "aVKSwnST5LWpUHDI",
+  "name": "Backlog Processor",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        100
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "set-options",
+      "name": "Set Options",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -200,
+        100
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "batch-size",
+              "name": "batchSize",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "delay-seconds",
+              "name": "delaySeconds",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "notion-db-id",
+              "name": "notionDatabaseId",
+              "value": "2cf4df89-4a69-819f-941c-f3f8703ef620",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "query-notion",
+      "name": "Query Inbox Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.notion.com/v1/databases/{{ $json.notionDatabaseId }}/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"filter\": {\n    \"property\": \"Status\",\n    \"status\": {\n      \"equals\": \"Inbox\"\n    }\n  },\n  \"page_size\": {{ $json.batchSize }}\n}"
+      }
+    },
+    {
+      "id": "check-results",
+      "name": "Has Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        200,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-length",
+              "leftValue": "={{ $json.results.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "split-items",
+      "name": "Split Into Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "fieldToSplitOut": "results"
+      }
+    },
+    {
+      "id": "build-payload",
+      "name": "Build Webhook Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Build payload for Bookmark Processor webhook\nconst item = $input.first().json;\n\n// Extract URL and page ID from Notion response\nconst pageId = item.id;\nconst url = item.properties?.Link?.url || '';\nconst title = item.properties?.Title?.title?.[0]?.plain_text || 'Untitled';\n\nif (!url) {\n  return [{\n    json: {\n      error: 'No URL found',\n      pageId: pageId,\n      title: title,\n      skipped: true\n    }\n  }];\n}\n\n// Format payload to match Notion automation format\nreturn [{\n  json: {\n    pageId: pageId,\n    title: title,\n    url: url,\n    payload: {\n      body: {\n        data: {\n          id: pageId,\n          properties: {\n            Link: { url: url }\n          }\n        }\n      }\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "check-url",
+      "name": "Has URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-skipped",
+              "leftValue": "={{ $json.skipped }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "call-processor",
+      "name": "Call Bookmark Processor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://royhen.app.n8n.cloud/webhook/process-bookmark",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload.body) }}",
+        "options": {
+          "timeout": 180000
+        },
+        "onError": "continueRegularOutput"
+      }
+    },
+    {
+      "id": "record-success",
+      "name": "Record Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "// Record successful processing\nconst input = $input.first().json;\n\nreturn [{\n  json: {\n    status: 'success',\n    pageId: input.pageId || '',\n    title: input.title || '',\n    url: input.url || '',\n    processed: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "record-skipped",
+      "name": "Record Skipped",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Record skipped item (no URL)\nconst input = $input.first().json;\n\nreturn [{\n  json: {\n    status: 'skipped',\n    pageId: input.pageId || '',\n    title: input.title || '',\n    reason: input.error || 'No URL'\n  }\n}];"
+      }
+    },
+    {
+      "id": "wait-rate-limit",
+      "name": "Wait (Rate Limit)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        0
+      ],
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "aggregate-results",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        0
+      ],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "processedItems",
+        "include": "allFieldsExcept"
+      }
+    },
+    {
+      "id": "report-results",
+      "name": "Report Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Generate processing report\nconst items = $input.first().json.processedItems || [];\n\nconst successful = items.filter(i => i.status === 'success').length;\nconst skipped = items.filter(i => i.status === 'skipped').length;\nconst failed = items.filter(i => i.status === 'error').length;\n\nreturn [{\n  json: {\n    summary: {\n      total: items.length,\n      successful: successful,\n      skipped: skipped,\n      failed: failed,\n      timestamp: new Date().toISOString()\n    },\n    items: items\n  }\n}];"
+      }
+    },
+    {
+      "id": "no-items",
+      "name": "No Items to Process",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// No items in Inbox\nreturn [{\n  json: {\n    summary: {\n      total: 0,\n      message: 'No items with Status = Inbox found',\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        -100
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-backlog",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Options": {
+      "main": [
+        [
+          {
+            "node": "Query Inbox Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Inbox Items": {
+      "main": [
+        [
+          {
+            "node": "Has Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Items?": {
+      "main": [
+        [
+          {
+            "node": "Split Into Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Items to Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Into Items": {
+      "main": [
+        [
+          {
+            "node": "Build Webhook Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Webhook Payload": {
+      "main": [
+        [
+          {
+            "node": "Has URL?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has URL?": {
+      "main": [
+        [
+          {
+            "node": "Call Bookmark Processor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Bookmark Processor": {
+      "main": [
+        [
+          {
+            "node": "Record Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Success": {
+      "main": [
+        [
+          {
+            "node": "Wait (Rate Limit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Skipped": {
+      "main": [
+        [
+          {
+            "node": "Wait (Rate Limit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait (Rate Limit)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Report Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "e636b186-0d39-42c7-a5ab-67410e26f79f",
+  "activeVersionId": "e636b186-0d39-42c7-a5ab-67410e26f79f",
+  "versionCounter": 16,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2025-12-29T13:59:07.693Z",
+      "createdAt": "2025-12-29T13:59:07.693Z",
+      "role": "workflow:owner",
+      "workflowId": "aVKSwnST5LWpUHDI",
+      "projectId": "WLfVoGEbhM21aKQc",
+      "project": {
+        "updatedAt": "2025-08-06T04:23:31.392Z",
+        "createdAt": "2025-08-06T04:23:26.059Z",
+        "id": "WLfVoGEbhM21aKQc",
+        "name": "Roy Hen Engel <royhenengel@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-08-06T04:23:26.060Z",
+            "createdAt": "2025-08-06T04:23:26.060Z",
+            "userId": "cc527931-acd6-4a2e-a333-4c92a84e898d",
+            "projectId": "WLfVoGEbhM21aKQc",
+            "user": {
+              "updatedAt": "2025-12-29T04:32:42.000Z",
+              "createdAt": "2025-08-06T04:23:24.660Z",
+              "id": "cc527931-acd6-4a2e-a333-4c92a84e898d",
+              "email": "royhenengel@gmail.com",
+              "firstName": "Roy",
+              "lastName": "Hen Engel",
+              "personalizationAnswers": null,
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "AbZxkqnDDoKqTpAp",
+                "userActivatedAt": 1754984654331,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1766868442844
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2025-12-28",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2025-12-29T14:03:37.757Z",
+    "createdAt": "2025-12-29T14:03:37.757Z",
+    "versionId": "e636b186-0d39-42c7-a5ab-67410e26f79f",
+    "workflowId": "aVKSwnST5LWpUHDI",
+    "nodes": [
+      {
+        "id": "manual-trigger",
+        "name": "Manual Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          100
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "set-options",
+        "name": "Set Options",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -200,
+          100
+        ],
+        "parameters": {
+          "mode": "manual",
+          "duplicateItem": false,
+          "assignments": {
+            "assignments": [
+              {
+                "id": "batch-size",
+                "name": "batchSize",
+                "value": 10,
+                "type": "number"
+              },
+              {
+                "id": "delay-seconds",
+                "name": "delaySeconds",
+                "value": 5,
+                "type": "number"
+              },
+              {
+                "id": "notion-db-id",
+                "name": "notionDatabaseId",
+                "value": "2cf4df89-4a69-819f-941c-f3f8703ef620",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "query-notion",
+        "name": "Query Inbox Items",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          0,
+          100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.notion.com/v1/databases/{{ $json.notionDatabaseId }}/query",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "notionApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Notion-Version",
+                "value": "2022-06-28"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"filter\": {\n    \"property\": \"Status\",\n    \"status\": {\n      \"equals\": \"Inbox\"\n    }\n  },\n  \"page_size\": {{ $json.batchSize }}\n}"
+        }
+      },
+      {
+        "id": "check-results",
+        "name": "Has Items?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          200,
+          100
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "check-length",
+                "leftValue": "={{ $json.results.length }}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "split-items",
+        "name": "Split Into Items",
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          400,
+          0
+        ],
+        "parameters": {
+          "fieldToSplitOut": "results"
+        }
+      },
+      {
+        "id": "build-payload",
+        "name": "Build Webhook Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// Build payload for Bookmark Processor webhook\nconst item = $input.first().json;\n\n// Extract URL and page ID from Notion response\nconst pageId = item.id;\nconst url = item.properties?.Link?.url || '';\nconst title = item.properties?.Title?.title?.[0]?.plain_text || 'Untitled';\n\nif (!url) {\n  return [{\n    json: {\n      error: 'No URL found',\n      pageId: pageId,\n      title: title,\n      skipped: true\n    }\n  }];\n}\n\n// Format payload to match Notion automation format\nreturn [{\n  json: {\n    pageId: pageId,\n    title: title,\n    url: url,\n    payload: {\n      body: {\n        data: {\n          id: pageId,\n          properties: {\n            Link: { url: url }\n          }\n        }\n      }\n    }\n  }\n}];"
+        }
+      },
+      {
+        "id": "check-url",
+        "name": "Has URL?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          800,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "check-skipped",
+                "leftValue": "={{ $json.skipped }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "call-processor",
+        "name": "Call Bookmark Processor",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1000,
+          -100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://royhen.app.n8n.cloud/webhook/process-bookmark",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.payload.body) }}",
+          "options": {
+            "timeout": 180000
+          },
+          "onError": "continueRegularOutput"
+        }
+      },
+      {
+        "id": "record-success",
+        "name": "Record Success",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1200,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "// Record successful processing\nconst input = $input.first().json;\n\nreturn [{\n  json: {\n    status: 'success',\n    pageId: input.pageId || '',\n    title: input.title || '',\n    url: input.url || '',\n    processed: true\n  }\n}];"
+        }
+      },
+      {
+        "id": "record-skipped",
+        "name": "Record Skipped",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1000,
+          100
+        ],
+        "parameters": {
+          "jsCode": "// Record skipped item (no URL)\nconst input = $input.first().json;\n\nreturn [{\n  json: {\n    status: 'skipped',\n    pageId: input.pageId || '',\n    title: input.title || '',\n    reason: input.error || 'No URL'\n  }\n}];"
+        }
+      },
+      {
+        "id": "wait-rate-limit",
+        "name": "Wait (Rate Limit)",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          1400,
+          0
+        ],
+        "parameters": {
+          "amount": 5,
+          "unit": "seconds"
+        }
+      },
+      {
+        "id": "aggregate-results",
+        "name": "Aggregate Results",
+        "type": "n8n-nodes-base.aggregate",
+        "typeVersion": 1,
+        "position": [
+          1600,
+          0
+        ],
+        "parameters": {
+          "aggregate": "aggregateAllItemData",
+          "destinationFieldName": "processedItems",
+          "include": "allFieldsExcept"
+        }
+      },
+      {
+        "id": "report-results",
+        "name": "Report Results",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1800,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// Generate processing report\nconst items = $input.first().json.processedItems || [];\n\nconst successful = items.filter(i => i.status === 'success').length;\nconst skipped = items.filter(i => i.status === 'skipped').length;\nconst failed = items.filter(i => i.status === 'error').length;\n\nreturn [{\n  json: {\n    summary: {\n      total: items.length,\n      successful: successful,\n      skipped: skipped,\n      failed: failed,\n      timestamp: new Date().toISOString()\n    },\n    items: items\n  }\n}];"
+        }
+      },
+      {
+        "id": "no-items",
+        "name": "No Items to Process",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          400,
+          200
+        ],
+        "parameters": {
+          "jsCode": "// No items in Inbox\nreturn [{\n  json: {\n    summary: {\n      total: 0,\n      message: 'No items with Status = Inbox found',\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+        }
+      },
+      {
+        "id": "webhook-trigger",
+        "name": "Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -400,
+          -100
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "process-backlog",
+          "responseMode": "lastNode",
+          "options": {}
+        }
+      }
+    ],
+    "connections": {
+      "Manual Trigger": {
+        "main": [
+          [
+            {
+              "node": "Set Options",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Options": {
+        "main": [
+          [
+            {
+              "node": "Query Inbox Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Query Inbox Items": {
+        "main": [
+          [
+            {
+              "node": "Has Items?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Items?": {
+        "main": [
+          [
+            {
+              "node": "Split Into Items",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No Items to Process",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Into Items": {
+        "main": [
+          [
+            {
+              "node": "Build Webhook Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Webhook Payload": {
+        "main": [
+          [
+            {
+              "node": "Has URL?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has URL?": {
+        "main": [
+          [
+            {
+              "node": "Call Bookmark Processor",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Record Skipped",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Bookmark Processor": {
+        "main": [
+          [
+            {
+              "node": "Record Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Record Success": {
+        "main": [
+          [
+            {
+              "node": "Wait (Rate Limit)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Record Skipped": {
+        "main": [
+          [
+            {
+              "node": "Wait (Rate Limit)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait (Rate Limit)": {
+        "main": [
+          [
+            {
+              "node": "Aggregate Results",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aggregate Results": {
+        "main": [
+          [
+            {
+              "node": "Report Results",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Set Options",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Roy Hen Engel",
+    "name": null,
+    "description": null
+  }
+}

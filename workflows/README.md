@@ -13,6 +13,8 @@ Routes URLs to appropriate Cloud Function based on content type:
 - Video URLs (TikTok, YouTube, etc.) → `video-enricher` Cloud Function
 - Webpage URLs (articles, products, etc.) → `webpage-enricher` Cloud Function
 
+**Note:** This workflow is tool-agnostic. Raindrop sync is handled separately in the [notion-workspace](../../notion-workspace) repo.
+
 **Triggers:**
 - Notion Database Automation (recommended)
 - Direct webhook call
@@ -73,6 +75,18 @@ curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
 
 ---
 
+### Backlog Processor
+**File:** `Backlog_Processor.json`
+**Trigger:** Manual
+**Status:** Active
+
+Batch processes unprocessed bookmarks:
+- Queries Notion for Status = "Inbox" items
+- Processes in batches (default 10)
+- 5-second delay between items (rate limiting)
+
+---
+
 ## Architecture
 
 ```
@@ -107,8 +121,9 @@ curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
 
 | Workflow | ID |
 |----------|-----|
-| Video Processor | `7IGCrP5UdZ6wdbij` |
 | Bookmark Processor | `DJVhLZKH7YIuvGv8` |
+| Video Processor | `7IGCrP5UdZ6wdbij` |
+| Backlog Processor | `aVKSwnST5LWpUHDI` |
 
 ## Cost Estimates
 
@@ -119,4 +134,4 @@ curl -X POST https://royhen.app.n8n.cloud/webhook/analyze-video-complete \
 
 ---
 
-**Last Updated:** December 24, 2025
+**Last Updated:** December 30, 2025
