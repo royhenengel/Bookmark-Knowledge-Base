@@ -13,7 +13,7 @@ Responsibilities (per ARCHITECTURE.md):
 - Extract code snippets if dev resource
 
 Does NOT:
-- Write to Notion/Raindrop (n8n's job)
+- Write to Notion (n8n's job)
 - Handle retries (n8n's job)
 - Make routing decisions (n8n's job)
 """

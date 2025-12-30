@@ -7,7 +7,7 @@ Historical development notes and implementation details.
 See the root-level docs for current system documentation:
 - [README.md](../README.md) - System overview and setup
 - [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) - System design and boundaries
-- [docs/SCHEMA_DESIGN.md](../docs/SCHEMA_DESIGN.md) - Notion schema and Raindrop mapper
+- [docs/SCHEMA_DESIGN.md](../docs/SCHEMA_DESIGN.md) - Notion schema design
 - [workflows/README.md](../workflows/README.md) - n8n workflow documentation
 
 ## Notes in This Folder
@@ -25,8 +25,8 @@ See the root-level docs for current system documentation:
 - ACRCloud music recognition
 - Google Drive storage
 
-### Phase 2: Bidirectional Sync (Dec 2025)
-- Notion schema design with Raindrop mapper
+### Phase 2: Webpage Enrichment (Dec 2025)
+- Notion schema design
 - webpage-enricher Cloud Function for non-video URLs
 - n8n Bookmark Processor workflow
 - Clear system boundaries (processing vs orchestration)

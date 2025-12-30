@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document describes the schema design for the bidirectional Notion ↔ Raindrop.io bookmark sync system, including the reasoning behind each decision.
+This document describes the Notion schema design for the bookmark enrichment system, including the reasoning behind each decision.
+
+> **Note:** Raindrop.io sync is managed separately. See [notion-raindrop-sync-impl-specs.md](../../notion-workspace/docs/notion-raindrop-sync-impl-specs.md) for Raindrop schema and sync documentation.
 
 ## Design Principles
 
@@ -57,8 +59,8 @@ We use this framework to decide where data should live:
 | Author | rich_text | - | Content creator/author name | Search/filter by creator |
 | Reading Time | number | number | Estimated minutes to read | Sort articles by length |
 | Price | number | dollar | Product price for shopping bookmarks | Filter deals, sort by price |
-| Raindrop ID | number | number | Raindrop bookmark ID for sync | Required for bidirectional sync (hidden from views) |
-| Sync Status | select | - | Synced, Pending, Conflict, Not Synced | Track sync state between systems |
+
+> **For Raindrop sync**, additional properties (`Raindrop ID`, `Sync Status`) are required. See [notion-raindrop-sync-impl-specs.md](../../notion-workspace/docs/notion-raindrop-sync-impl-specs.md#required-notion-properties).
 
 ### Page Body Content (Not Properties)
 
@@ -71,82 +73,6 @@ These are stored in the page body, not as properties:
 | Visual Analysis | Detailed breakdown of what's shown in videos. Long-form, reference only. |
 | Code Snippet | Programming code from dev resources. Needs formatting, can be multi-line. |
 | Music Recognition | List of recognized songs from videos. Only relevant for video bookmarks. |
-
----
-
-## Raindrop.io Schema
-
-Raindrop has limited fields compared to Notion:
-
-| Field | Type | Max Length | Usage |
-|-------|------|------------|-------|
-| title | string | - | Bookmark title |
-| link | string | - | URL |
-| excerpt | string | 10,000 chars | Main content field - we pack enrichment data here |
-| tags | array | - | Tags (synced from Notion Topics) |
-| collection | object | - | Folder/category |
-| cover | string | - | Image URL |
-| created | date | - | Creation timestamp |
-| note | string | - | Additional notes |
-
----
-
-## Schema Mapper: Notion ↔ Raindrop
-
-### Notion → Raindrop
-
-| Notion Property | Raindrop Field | Transformation |
-|-----------------|----------------|----------------|
-| Title | title | Direct copy |
-| Link | link | Direct copy |
-| Topics | tags | Extract topic names to array |
-| Type | tags | Add as additional tag (e.g., "type:video") |
-| AI Summary | excerpt | Include in formatted excerpt |
-| AI Analysis | excerpt | Include in formatted excerpt |
-| Transcript | excerpt | Include in formatted excerpt (truncated if needed) |
-| Visual Analysis | excerpt | Include in formatted excerpt |
-| Favorite | tags | Add "favorite" tag if true |
-| Created time | created | Direct copy |
-| (internal ID) | note | Store Notion page ID for back-reference |
-
-### Raindrop Excerpt Format
-
-```
-📝 Summary
-{ai_summary}
-
-🏷️ Type: {type}
-👤 Author: {author}
-⏱️ Reading Time: {reading_time} min
-
-🤖 AI Analysis
-{ai_analysis}
-
-🎬 Transcript
-{transcript}
-
-👁️ Visual Analysis
-{visual_analysis}
-
-🎵 Music
-{music_recognition}
-
-💰 Price: ${price}
-
-🔗 Notion: {notion_page_url}
-```
-
-### Raindrop → Notion
-
-| Raindrop Field | Notion Property | Transformation |
-|----------------|-----------------|----------------|
-| title | Title | Direct copy |
-| link | Link | Direct copy |
-| tags | Topics | Create/link to Topic pages |
-| excerpt | Description | Store original excerpt |
-| cover | (page cover) | Set as page cover image |
-| created | Created time | Direct copy |
-| _id | Raindrop ID | Store for sync reference |
 
 ---
 
@@ -175,7 +101,6 @@ The system auto-detects content type based on URL patterns:
 6. Store in Google Cloud Storage
 7. Upload to Google Drive
 8. Update Notion with enriched data
-9. Sync to Raindrop
 
 ### Regular Bookmarks
 1. Fetch page content
@@ -185,26 +110,6 @@ The system auto-detects content type based on URL patterns:
 5. Extract price if product page
 6. Extract code snippets if dev resource
 7. Update Notion with enriched data
-8. Sync to Raindrop
-
----
-
-## Sync Logic
-
-### Bidirectional Sync Rules
-
-1. **New in Notion** → Create in Raindrop, process if video/needs enrichment
-2. **New in Raindrop** → Create in Notion, process if video/needs enrichment
-3. **Updated in either** → Sync to other (check timestamps to avoid loops)
-4. **Deleted in either** → Optionally delete from other (configurable)
-5. **Conflict** → Mark as "Conflict" status, manual resolution required
-
-### Deduplication
-
-- Each entry gets a `sync_id` shared between both systems
-- Notion: stored in `Raindrop ID` property
-- Raindrop: Notion page ID stored in `note` field
-- Workflow checks: "Did this change come from sync?" → Skip if yes
 
 ---
 
@@ -213,5 +118,6 @@ The system auto-detects content type based on URL patterns:
 | Date | Change | Reasoning |
 |------|--------|-----------|
 | 2024-12-23 | Initial schema design | Base structure for bookmark sync |
-| 2024-12-23 | Added 7 new properties | AI Summary, Domain, Author, Reading Time, Price, Raindrop ID, Sync Status |
+| 2024-12-23 | Added 5 new properties | AI Summary, Domain, Author, Reading Time, Price |
+| 2024-12-30 | Moved Raindrop sync docs | Raindrop schema/sync moved to notion-workspace repo |
 | 2024-12-23 | Defined page body content | AI Analysis, Transcript, Visual Analysis, Code Snippet, Music moved to body |

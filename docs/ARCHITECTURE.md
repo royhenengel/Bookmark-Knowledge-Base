@@ -17,8 +17,9 @@ Each system has a **single responsibility**:
 | **Cloud Functions** | Processing & Intelligence | Data storage, orchestration |
 | **n8n** | Orchestration & Data Movement | Business logic, heavy processing |
 | **Notion** | Rich Data Storage & UI | Processing, external integrations |
-| **Raindrop** | Lightweight Sync & Mobile Access | Primary storage, processing |
 | **Google Cloud Storage** | Media Storage | Processing, metadata |
+
+> **Note:** Raindrop.io sync is managed separately in [notion-workspace](../../notion-workspace). See [notion-raindrop-sync-impl-specs.md](../../notion-workspace/docs/notion-raindrop-sync-impl-specs.md).
 
 ### Why This Matters
 
@@ -34,21 +35,21 @@ Each system has a **single responsibility**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              USER INTERFACES                                 │
+│                              USER INTERFACE                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│   ┌──────────────┐              ┌──────────────┐                            │
-│   │   Notion     │              │  Raindrop.io │                            │
-│   │  (Primary)   │◄────sync────►│  (Secondary) │                            │
-│   │              │              │              │                            │
-│   │ • Rich UI    │              │ • Mobile app │                            │
-│   │ • Relations  │              │ • Browser    │                            │
-│   │ • Views      │              │   extension  │                            │
-│   └──────┬───────┘              └──────┬───────┘                            │
-│          │                              │                                    │
-└──────────┼──────────────────────────────┼────────────────────────────────────┘
-           │                              │
-           ▼                              ▼
+│                         ┌──────────────────┐                                │
+│                         │      Notion      │                                │
+│                         │   (Resources)    │                                │
+│                         │                  │                                │
+│                         │ • Rich UI        │                                │
+│                         │ • Relations      │                                │
+│                         │ • Views          │                                │
+│                         └────────┬─────────┘                                │
+│                                  │                                          │
+└──────────────────────────────────┼──────────────────────────────────────────┘
+                                   │ Webhook on new bookmark
+                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           ORCHESTRATION LAYER                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -116,7 +117,7 @@ Each system has a **single responsibility**:
 - ✅ DO: AI analysis, data extraction, API calls to processing services
 - ✅ DO: Store media to GCS/Drive
 - ✅ DO: Return structured JSON with all extracted data
-- ❌ DON'T: Write to Notion/Raindrop directly
+- ❌ DON'T: Write to Notion directly
 - ❌ DON'T: Make decisions about what to sync where
 - ❌ DON'T: Handle retries or error recovery (that's n8n's job)
 
@@ -186,9 +187,8 @@ interface WebpageProcessingResult {
 **Rules:**
 - ✅ DO: Trigger workflows on events (webhook, schedule, database change)
 - ✅ DO: Route requests to appropriate Cloud Function based on URL type
-- ✅ DO: Map data between systems (Notion ↔ Raindrop schema translation)
 - ✅ DO: Handle errors, retries, notifications
-- ✅ DO: Write enriched data to Notion/Raindrop
+- ✅ DO: Write enriched data to Notion
 - ❌ DON'T: Perform heavy computation or AI calls
 - ❌ DON'T: Store state beyond workflow execution
 - ❌ DON'T: Implement business logic (just routing logic)
@@ -197,9 +197,8 @@ interface WebpageProcessingResult {
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `notion-to-raindrop` | Notion webhook | Sync new/updated Notion entries to Raindrop |
-| `raindrop-to-notion` | Raindrop webhook/poll | Sync new/updated Raindrop entries to Notion |
-| `process-bookmark` | Called by sync workflows | Route to video-downloader or webpage-enricher |
+| `process-bookmark` | Notion webhook | Route to video-enricher or webpage-enricher |
+| `video-processor` | Called by process-bookmark | Video-specific processing (ACRCloud, Drive) |
 | `backlog-processor` | Manual/scheduled | Batch process unprocessed bookmarks |
 
 ---
@@ -220,23 +219,6 @@ interface WebpageProcessingResult {
 - Relations to Topics, Projects, Areas
 - AI-generated content (summary, analysis, transcript)
 - Page body content
-
----
-
-### Raindrop.io (Secondary Storage)
-
-**Purpose:** Mobile access, browser extension, lightweight sync
-
-**Rules:**
-- ✅ IS: Mirror of Notion data (subset)
-- ✅ IS: Entry point for quick capture (mobile, browser)
-- ✅ HAS: Limited fields (title, link, excerpt, tags)
-- ❌ ISN'T: Source of truth (Notion is)
-- ❌ ISN'T: Place for rich data (use Notion)
-
-**Data Owned:**
-- Raindrop ID (for sync reference)
-- Collection assignments
 
 ---
 
@@ -265,30 +247,9 @@ n8n checks URL type
                                  │
                                  ▼
                     n8n updates Notion with enriched data
-                                 │
-                                 ▼
-                    n8n creates/updates Raindrop entry
 ```
 
-### Pattern 2: New Bookmark from Raindrop
-
-```
-User saves URL via Raindrop (mobile/browser)
-        │
-        ▼
-n8n detects new entry (poll/webhook)
-        │
-        ▼
-n8n creates Notion page with basic info
-        │
-        ▼
-n8n triggers Pattern 1 (processing)
-        │
-        ▼
-Both Notion and Raindrop updated with enriched data
-```
-
-### Pattern 3: Backlog Processing
+### Pattern 2: Backlog Processing
 
 ```
 Scheduled trigger (or manual)
@@ -301,9 +262,7 @@ For each unprocessed bookmark:
         │
         ├─► Route to appropriate Cloud Function
         │
-        ├─► Update Notion with results
-        │
-        └─► Update Raindrop mirror
+        └─► Update Notion with results
         │
         ▼
 Rate limit: X bookmarks per batch
@@ -337,11 +296,6 @@ Rate limit: X bookmarks per batch
 - Retry recoverable errors (with backoff)
 - Notify on persistent failures
 
-### Sync Conflicts
-- Last-write-wins with timestamp comparison
-- Mark as "Conflict" status if edits within 5 minutes in both systems
-- Manual resolution required for conflicts
-
 ---
 
 ## API Keys & Credentials
@@ -353,7 +307,6 @@ Rate limit: X bookmarks per batch
 | ACRCloud | n8n workflow | n8n credentials |
 | OpenAI | n8n workflow | n8n credentials |
 | Notion | n8n workflow | n8n credentials |
-| Raindrop | n8n workflow | n8n credentials |
 | Google Cloud | video-enricher, webpage-enricher | Service account |
 
 **Rule:** API keys never hardcoded. Always environment variables or credential stores.
@@ -382,7 +335,8 @@ Rate limit: X bookmarks per batch
 | 2024-12-23 | Separate Cloud Functions for video vs webpage | Different processing needs, independent scaling, clearer boundaries |
 | 2024-12-23 | n8n for orchestration only | Keep logic in testable Cloud Functions, n8n for routing/mapping |
 | 2024-12-23 | Notion as source of truth | Richer schema, better UI, relations support |
-| 2024-12-23 | Cloud Functions don't write to Notion/Raindrop | Single responsibility - processing only returns data |
+| 2024-12-23 | Cloud Functions don't write to Notion | Single responsibility - processing only returns data |
+| 2024-12-30 | Moved Raindrop sync to notion-workspace | Separation of concerns - sync managed separately |
 | 2025-12-27 | Complete Notion integration with page body content | Full enrichment data in page body, error handling with notifications (see ADR-001) |
 
 ---

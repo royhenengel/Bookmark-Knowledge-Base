@@ -5,7 +5,9 @@ Generated: 2025-12-29
 ---
 
 <original_task>
-Build an AI-powered bookmark enrichment system with bidirectional Notion and Raindrop.io sync. The system automatically processes bookmarked videos and webpages to generate metadata, transcriptions, summaries, and more.
+Build an AI-powered bookmark enrichment system for Notion. The system automatically processes bookmarked videos and webpages to generate metadata, transcriptions, summaries, and more.
+
+> **Note:** Raindrop.io sync is managed separately in [notion-workspace](../notion-workspace). See [notion-raindrop-sync-impl-specs.md](../notion-workspace/docs/notion-raindrop-sync-impl-specs.md).
 </original_task>
 
 <work_completed>
@@ -82,16 +84,11 @@ Build an AI-powered bookmark enrichment system with bidirectional Notion and Rai
 
 ### Notion Setup
 - Database: **Resources** (ID: `2cf4df89-4a69-819f-941c-f3f8703ef620`)
-- Properties: Title, Link, Type, Status, AI Summary, Domain, Author, Reading Time, Price, Raindrop ID, Sync Status
+- Properties: Title, Link, Type, Status, AI Summary, Domain, Author, Reading Time, Price
 - Automation: Webhook trigger on page add to process-bookmark endpoint
 </work_completed>
 
 <work_remaining>
-## High Priority
-1. **Raindrop.io Bidirectional Sync** - MOVED to [notion-workspace](../notion-workspace) repo
-   - See `notion-workspace/docs/raindrop-sync.md` for documentation
-   - Workflow IDs: `LnuuQj3dBVIhY1CP`, `GStAU4AH6QHgQoIx`
-
 ## Medium Priority
 2. **Backlog Processor Workflow** - IMPLEMENTED (Dec 29, 2025)
    - Workflow ID: `aVKSwnST5LWpUHDI`
@@ -165,7 +162,6 @@ Build an AI-powered bookmark enrichment system with bidirectional Notion and Rai
 - Cloud Functions: Processing & Intelligence only
 - n8n: Orchestration & Data Movement only
 - Notion: Rich Data Storage & UI
-- Raindrop: Lightweight Sync & Mobile Access
 
 ## Notion 2000-char Limit
 - All rich_text content must be split into chunks < 2000 chars
@@ -195,8 +191,6 @@ Build an AI-powered bookmark enrichment system with bidirectional Notion and Rai
 - `GitHub to Notion Sync v3` (18 nodes) - GitHub integration
 - `Notion to GitHub Sync` (8 nodes) - Bidirectional GitHub sync
 
-Note: Raindrop sync workflows moved to [notion-workspace](../notion-workspace) repo.
-
 ## Git Status
 - Branch: `main`
 - Clean working tree
@@ -223,21 +217,9 @@ Note: Raindrop sync workflows moved to [notion-workspace](../notion-workspace) r
 
 ## Recommended Next Steps
 
-1. **Configure Raindrop Credentials** - REQUIRED for sync to work
-   - Open n8n UI and configure Raindrop OAuth2 on the 4 nodes listed above
-   - Activate the `Raindrop to Notion Sync` workflow
-2. **Test Bidirectional Sync** - Verify the integration
-   - Add bookmark in Raindrop → should appear in Notion and get enriched
-   - Add bookmark in Notion → should sync to Raindrop with enriched data
-3. **Add Error Recovery** - Automatic retry for recoverable errors
-4. **Add Schedule Trigger to Backlog Processor** - Optional daily/weekly auto-run
-
-## Recently Implemented (Dec 30, 2025)
-
-- **Raindrop.io Bidirectional Sync** - Moved to [notion-workspace](../notion-workspace) repo
-  - See `notion-workspace/docs/raindrop-sync.md` for full documentation
-  - Workflow IDs: `LnuuQj3dBVIhY1CP` (Raindrop → Notion), `GStAU4AH6QHgQoIx` (Notion → Raindrop)
-  - Requires Raindrop OAuth2 credential configuration in n8n UI
+1. **Add Error Recovery** - Automatic retry for recoverable errors
+2. **Add Schedule Trigger to Backlog Processor** - Optional daily/weekly auto-run
+3. **Implement Podcast Index RSS Fallback** - For podcast transcription when YouTube fails
 
 ## Recently Fixed (Dec 29, 2025)
 

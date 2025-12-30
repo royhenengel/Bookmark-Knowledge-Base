@@ -60,7 +60,7 @@ Complete the implementation by adding:
   - Music Recognition (heading + bulleted list)
 - Processing failures are now visible in Notion (Status = Error, red callout in page)
 - Email notifications alert on failures
-- Sync Status property enables future Raindrop bidirectional sync
+- Sync Status property enables external sync integrations (see [notion-workspace](../../notion-workspace))
 
 **Trade-offs:**
 

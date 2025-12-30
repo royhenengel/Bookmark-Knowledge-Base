@@ -1,13 +1,15 @@
 # Bookmark Knowledge Base
 
-AI-powered bookmark enrichment system with bidirectional Notion ↔ Raindrop.io sync. Automatically processes videos and webpages to generate metadata, transcriptions, summaries, and more.
+AI-powered bookmark enrichment system for Notion. Automatically processes videos and webpages to generate metadata, transcriptions, summaries, and more.
+
+> **Raindrop.io sync** is managed separately in [notion-workspace](../notion-workspace). See [notion-raindrop-sync-impl-specs.md](../notion-workspace/docs/notion-raindrop-sync-impl-specs.md).
 
 [![Status](https://img.shields.io/badge/status-active-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 ## Overview
 
-Save a bookmark anywhere (Notion or Raindrop.io) and the system automatically:
+Save a bookmark to Notion and the system automatically:
 
 **For Videos (TikTok, YouTube):**
 - Downloads and stores in Google Drive
@@ -23,26 +25,21 @@ Save a bookmark anywhere (Notion or Raindrop.io) and the system automatically:
 - Extracts prices from product pages
 - Extracts code snippets from dev resources
 
-**Sync:**
-- Bidirectional Notion ↔ Raindrop.io sync
-- Enriched data flows to both systems
-
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        USER INTERFACES                               │
-│   Notion (Primary)  ◄────────sync────────►  Raindrop.io (Mobile)   │
+│                           Notion                                     │
+│                    (Resources Database)                              │
 └───────────────────────────────┬─────────────────────────────────────┘
-                                │
+                                │ Webhook on new bookmark
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      ORCHESTRATION (n8n)                             │
-│   • Triggers on new bookmarks                                        │
-│   • Routes to appropriate processor                                  │
-│   • Maps data between systems                                        │
+│   • Routes URLs to appropriate processor                             │
+│   • Updates Notion with enriched data                                │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │
                 ┌───────────────┴───────────────┐
@@ -66,7 +63,6 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
 | **Cloud Functions** | Processing & Intelligence | Data storage, orchestration |
 | **n8n** | Orchestration & Data Movement | Business logic, heavy processing |
 | **Notion** | Rich Data Storage & UI | Processing, external integrations |
-| **Raindrop** | Lightweight Sync & Mobile | Primary storage, processing |
 
 ## Cloud Functions
 
@@ -115,8 +111,6 @@ See [docs/SCHEMA_DESIGN.md](docs/SCHEMA_DESIGN.md) for complete schema.
 | Author | text | Content creator |
 | Reading Time | number | Minutes (articles) |
 | Price | number | Product price (USD) |
-| Raindrop ID | number | For sync |
-| Sync Status | select | Synced, Pending, Conflict |
 
 ### Page Body Content
 - AI Analysis (detailed)
@@ -131,7 +125,6 @@ See [docs/SCHEMA_DESIGN.md](docs/SCHEMA_DESIGN.md) for complete schema.
 - Google Cloud account with billing
 - n8n Cloud account
 - Notion workspace + integration
-- Raindrop.io account + API token
 - API keys: Gemini, AssemblyAI, ACRCloud, OpenAI
 
 ### Deploy Cloud Functions
@@ -177,7 +170,7 @@ New bookmarks are now automatically enriched with AI summaries, titles, and meta
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, boundaries, data flows |
-| [SCHEMA_DESIGN.md](docs/SCHEMA_DESIGN.md) | Notion schema, Raindrop mapper, decisions |
+| [SCHEMA_DESIGN.md](docs/SCHEMA_DESIGN.md) | Notion schema design and decisions |
 
 ## Cost Estimate
 
@@ -206,4 +199,4 @@ MIT License - See [LICENSE](LICENSE)
 
 ---
 
-**Last Updated:** December 24, 2025
+**Last Updated:** December 30, 2025
