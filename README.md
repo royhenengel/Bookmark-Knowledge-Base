@@ -165,12 +165,38 @@ Set up automatic processing for new bookmarks:
 
 New bookmarks are now automatically enriched with AI summaries, titles, and metadata.
 
+## Shared Utilities
+
+The `shared/` module provides centralized validation and configuration:
+
+| Module | Purpose |
+|--------|---------|
+| `title_utils.py` | Title validation, 70-char truncation at word boundaries |
+| `analysis_utils.py` | Gemini analysis parsing, section icons, validation |
+
+Section icons are defined in `shared/analysis_utils.py` and must match the n8n workflow. See [shared/README.md](shared/README.md).
+
+## Testing
+
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests
+pytest
+
+# Run specific test categories
+pytest tests/unit/test_error_contracts.py::TestSectionIcons -v    # Icon tests
+pytest tests/unit/test_error_contracts.py::TestTitleLengthLimits -v  # Title tests
+```
+
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, boundaries, data flows |
 | [SCHEMA_DESIGN.md](docs/SCHEMA_DESIGN.md) | Notion schema design and decisions |
+| [shared/README.md](shared/README.md) | Shared utilities and section icons |
 
 ## Cost Estimate
 
@@ -199,4 +225,4 @@ MIT License - See [LICENSE](LICENSE)
 
 ---
 
-**Last Updated:** December 30, 2025
+**Last Updated:** December 31, 2025

@@ -180,6 +180,50 @@ interface WebpageProcessingResult {
 
 ---
 
+### Shared Utilities Module
+
+**Purpose:** Centralized validation and configuration for consistency across components
+
+**Location:** `/shared/`
+
+| Module | Purpose |
+|--------|---------|
+| `title_utils.py` | Title validation, truncation (70 char limit), sanitization |
+| `analysis_utils.py` | Gemini analysis parsing, section validation, icon configuration |
+
+**Critical Configuration:**
+
+```python
+# Section icons - MUST match n8n workflow sectionIcons
+SECTION_ICONS = {
+    'Visual Content': '👁️',
+    'Audio Content': '🔊',
+    'Style & Production': '🎬',
+    'Mood & Tone': '🎭',
+    'Key Messages': '💡',
+    'Content Category': '📁',
+    'Transcript': '📝',
+}
+
+# Required in every Gemini video analysis
+REQUIRED_ANALYSIS_SECTIONS = [
+    'Visual Content', 'Audio Content', 'Style & Production',
+    'Mood & Tone', 'Key Messages', 'Content Category',
+]
+```
+
+**Keeping in Sync:**
+
+When updating icons or section names, update in order:
+1. `shared/analysis_utils.py` - Source of truth
+2. `video-enricher/main.py` - Gemini prompt
+3. n8n `Build Page Blocks` node - `sectionIcons` object
+4. Run tests to verify: `pytest tests/unit/test_error_contracts.py::TestSectionIcons -v`
+
+See [shared/README.md](../shared/README.md) for detailed documentation.
+
+---
+
 ### n8n (Orchestration Layer)
 
 **Purpose:** Workflow automation, data routing, sync coordination
@@ -350,3 +394,4 @@ Rate limit: X bookmarks per batch
 | 2024-12-23 | Added data flow patterns |
 | 2024-12-23 | Added error handling strategy |
 | 2025-12-27 | Added ADR-001: Complete Notion integration with page body content and error handling |
+| 2025-12-31 | Added shared utilities module documentation (section icons, title/analysis validation) |

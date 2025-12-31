@@ -7,10 +7,16 @@ import yt_dlp
 import tempfile
 import subprocess
 import os
+import sys
 import json
 import traceback
 import time
 from datetime import timedelta
+
+# Add shared module to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from shared.title_utils import truncate_title, validate_title, sanitize_title, MAX_TITLE_LENGTH
+from shared.analysis_utils import validate_video_enrichment, REQUIRED_ANALYSIS_SECTIONS, SECTION_ICONS
 
 # Configuration
 BUCKET_NAME = os.environ.get('GCS_BUCKET', 'video-processor-temp-rhe')
@@ -302,7 +308,12 @@ def download_tiktok_with_ytdlp(url, tmpdir):
         title = info.get('title') or ''
         if not title or title == video_id:
             title = info.get('description', 'Untitled')
-        title = str(title)[:100] if title else 'Untitled'
+
+        # Sanitize and truncate title at word boundary (max 70 chars)
+        title = sanitize_title(str(title)) if title else 'Untitled'
+        title, was_truncated = truncate_title(title)
+        if not title:
+            title = 'Untitled'
 
         return {
             'filepath': filepath,
@@ -520,10 +531,13 @@ def upload_to_gcs(client, filepath, filename):
 
 
 def generate_smart_filename(title, uploader, ext='mp4'):
-    """Generate filename matching existing convention."""
-    # Sanitize title (keep letters, numbers, spaces)
-    sanitized_title = ''.join(c for c in title if c.isalnum() or c.isspace())
-    sanitized_title = ' '.join(sanitized_title.split())[:80]  # Limit to 80 chars
+    """Generate filename matching existing convention.
+
+    Uses smart truncation at word boundaries (max 70 chars for title).
+    """
+    # Sanitize and truncate title at word boundary
+    sanitized_title = sanitize_title(title)
+    sanitized_title, _ = truncate_title(sanitized_title)
 
     # Capitalize uploader
     capitalized_uploader = ' '.join(
@@ -577,17 +591,23 @@ def analyze_video_with_gemini(video_path, api_key=None):
 
         prompt = """Analyze this video in detail. Provide a comprehensive analysis covering:
 
-1. **Visual Content**: Describe what you see throughout the video - people, objects, settings, actions, transitions, visual effects, text overlays, and any on-screen graphics.
+1. **👁️ Visual Content**
+Describe what you see throughout the video - people, objects, settings, actions, transitions, visual effects, text overlays, and any on-screen graphics.
 
-2. **Audio Content**: Describe the audio - speech (summarize what is said), music, sound effects, and overall audio quality.
+2. **🔊 Audio Content**
+Describe the audio - speech (summarize what is said), music, sound effects, and overall audio quality.
 
-3. **Style & Production**: Comment on the video style, editing techniques, pacing, and production quality.
+3. **🎬 Style & Production**
+Comment on the video style, editing techniques, pacing, and production quality.
 
-4. **Mood & Tone**: Describe the overall mood, emotional tone, and atmosphere of the video.
+4. **🎭 Mood & Tone**
+Describe the overall mood, emotional tone, and atmosphere of the video.
 
-5. **Key Messages**: What are the main points, messages, or takeaways from this video?
+5. **💡 Key Messages**
+What are the main points, messages, or takeaways from this video?
 
-6. **Content Category**: What type of content is this? (e.g., tutorial, entertainment, educational, promotional, personal vlog, etc.)
+6. **📁 Content Category**
+What type of content is this? (e.g., tutorial, entertainment, educational, promotional, personal vlog, etc.)
 
 Be specific and detailed in your analysis."""
 
@@ -723,6 +743,21 @@ def download_and_store(request):
                     api_key=gemini_api_key
                 )
                 response['gemini_analysis'] = gemini_result
+
+            # Validate that all required fields are present and non-empty
+            validation_result = validate_video_enrichment(response)
+            response['validation'] = {
+                'valid': validation_result['valid'],
+                'errors': validation_result['errors'],
+                'required_sections': REQUIRED_ANALYSIS_SECTIONS
+            }
+
+            # If validation failed, add to errors array for n8n handling
+            if not validation_result['valid']:
+                if 'errors' not in response:
+                    response['errors'] = []
+                response['errors'].extend(validation_result['errors'])
+                print(f"Validation errors: {validation_result['errors']}")
 
             return (response, 200, headers)
 
