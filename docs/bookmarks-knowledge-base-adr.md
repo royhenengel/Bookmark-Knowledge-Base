@@ -1,6 +1,6 @@
 # Bookmarks Knowledge Base - Architecture Decision Records (ADR)
 
-> **Last synced:** January 1, 2026 16:17 UTC
+> **Last synced:** January 1, 2026 16:30 UTC
 
 This document tracks architectural decisions made during the development of the Bookmark Knowledge Base system.
 
@@ -63,7 +63,7 @@ Complete the implementation by adding:
   - Music Recognition (heading + bulleted list)
 - Processing failures are now visible in Notion (Sync Status = Error, red callout in page)
 - Email notifications alert on failures
-- Sync Status property enables external sync integrations (see [notion-workspace](../../notion-workspace))
+- Sync Status property enables external sync integrations (see notion-workspace repo)
 
 **Trade-offs:**
 
@@ -72,8 +72,8 @@ Complete the implementation by adding:
 
 ### Related
 
-- Architecture: `/docs/ARCHITECTURE.md`
-- Schema: `/docs/SCHEMA_DESIGN.md`
+- Architecture: `docs/ARCHITECTURE.md`
+- Schema: `docs/SCHEMA_DESIGN.md`
 - n8n Workflow: `Bookmark_Processor`
 
 ---
@@ -150,7 +150,7 @@ function splitText(text, maxLength = 2000) {
 ### Related
 
 - ADR-001: Complete Notion Integration
-- Notion API Docs: [Block limits](https://developers.notion.com/reference/request-limits#limits-for-property-values)
+- Notion API Docs: Block limits (https://developers.notion.com/reference/request-limits#limits-for-property-values)
 
 ---
 
@@ -318,25 +318,25 @@ $('Has Error?').item.json.error
 Use this template for future ADRs:
 
 ```markdown
-## ADR-XXX: [Title]
+## ADR-XXX: Title
 
-**Date:** [Date]
+**Date:** Date
 
-**Status:** [Proposed | Accepted | Deprecated | Superseded]
+**Status:** Proposed | Accepted | Deprecated | Superseded
 
 ### Context
 
-[What is the issue that we're seeing that is motivating this decision or change?]
+What is the issue that we're seeing that is motivating this decision or change?
 
 ### Decision
 
-[What is the change that we're proposing and/or doing?]
+What is the change that we're proposing and/or doing?
 
 ### Consequences
 
-[What becomes easier or more difficult to do because of this change?]
+What becomes easier or more difficult to do because of this change?
 
 ### Related
 
-[Links to related documents, code, or other ADRs]
+Links to related documents, code, or other ADRs
 ```
