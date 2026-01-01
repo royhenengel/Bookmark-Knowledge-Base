@@ -151,6 +151,84 @@ function splitText(text, maxLength = 2000) {
 
 ---
 
+## ADR-003: Error Notification Rules and Email Configuration
+
+**Date:** January 1, 2026
+
+**Status:** Implemented
+
+### Context
+
+The error notification system needed refinement:
+
+1. Email was configured to send to a non-existent address (`roy@royengel.com`)
+2. Email sender showed as raw address, not a friendly name
+3. Notification triggers were too narrow - some important failures were not being reported
+4. AI analysis failures were silently ignored
+5. Missing critical content (transcripts, prices, code snippets) went unnoticed
+
+### Decision
+
+#### 1. Email Configuration Updates
+
+| Setting | Before | After |
+|---------|--------|-------|
+| **To** | `roy@royengel.com` | `royhenengel@gmail.com` |
+| **From Display** | (none) | `LifeOS` |
+| **From Address** | `notifications@royhen.app.n8n.cloud` | (unchanged) |
+
+#### 2. Enhanced Notification Triggers
+
+Updated `is_error()` function in `tests/unit/test_notification_logic.py`:
+
+| Trigger | Before | After |
+|---------|--------|-------|
+| HTTP 400/500 | Notify | Notify |
+| Processing errors (timeout, 404, bot block) | Notify | Notify |
+| AI analysis failed | **No notify** | **Notify** |
+| Missing title | Notify | Notify |
+| Unknown content type | Notify | Notify |
+| Transcription failed | Notify | Notify |
+| Video/podcast without transcript | **No notify** | **Notify** |
+| Product without price | **No notify** | **Notify** |
+| Code page without snippets | **No notify** | **Notify** |
+| Other recoverable failures | No notify | No notify |
+
+#### 3. Error Classification
+
+Errors are classified into tiers:
+
+| Tier | HTTP Status | Notification |
+|------|-------------|--------------|
+| **Fatal** | 400/500 | Always |
+| **Processing Error** | 200 + `error` field | Always |
+| **Partial Failure** | 200 + `errors` array | If critical |
+| **Missing Content** | 200 | If content-type specific |
+| **Success** | 200 | Never |
+
+### Consequences
+
+**Positive:**
+
+- Notifications now arrive at working email address
+- Email clearly shows "LifeOS" as sender
+- AI failures are now tracked and reported
+- Content-specific failures (no transcript, no price, no code) are caught
+- Better visibility into processing quality
+
+**Trade-offs:**
+
+- May generate more notifications initially (expected during tuning)
+- Some "false positives" for content that genuinely has no transcript/price/code
+
+### Related
+
+- ADR-001: Complete Notion Integration (original error handling)
+- n8n Workflow: `Bookmark_Processor` (Send Error Email node)
+- Test file: `tests/unit/test_notification_logic.py`
+
+---
+
 ## ADR Template
 
 Use this template for future ADRs:
