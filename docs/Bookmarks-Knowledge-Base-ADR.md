@@ -33,13 +33,14 @@ Complete the implementation by adding:
 | `Append Page Content` | PATCH /blocks/{id}/children API call |
 | `Skip Page Content` | Pass-through when no content |
 
-#### 2. Error Handling Branch - 5 new nodes
+#### 2. Error Handling Branch - 6 new nodes
 
 | Node | Purpose |
 |------|---------|
-| `Set Error Status` | Sets Notion Status property to "Error" |
+| `Has Error?` | IF node routing errors vs success |
+| `Set Error Status` | Sets Notion "Sync Status" property to "Error" |
 | `Add Error to Page` | Adds red callout block with error details |
-| `Send Error Email` | Emails roy@royengel.com on failures |
+| `Send Error Email` | Emails royhenengel@gmail.com on failures |
 | `Build Error Response` | Formats error JSON |
 | `Respond with Error` | Returns 500 status |
 
@@ -51,14 +52,14 @@ Complete the implementation by adding:
 
 **Positive:**
 
-- Workflow now has 21 nodes (up from 10)
+- Workflow now has 22 nodes (up from 10)
 - Full enrichment data now appears in Notion page body with proper formatting:
   - AI Analysis (heading + paragraph)
   - Transcript (heading + paragraph)
   - Visual Analysis (heading + paragraph)
   - Code Snippets (heading + code blocks)
   - Music Recognition (heading + bulleted list)
-- Processing failures are now visible in Notion (Status = Error, red callout in page)
+- Processing failures are now visible in Notion (Sync Status = Error, red callout in page)
 - Email notifications alert on failures
 - Sync Status property enables external sync integrations (see [notion-workspace](../../notion-workspace))
 
@@ -174,8 +175,9 @@ The error notification system needed refinement:
 | Setting | Before | After |
 |---------|--------|-------|
 | **To** | `roy@royengel.com` | `royhenengel@gmail.com` |
-| **From Display** | (none) | `LifeOS` |
-| **From Address** | `notifications@royhen.app.n8n.cloud` | (unchanged) |
+| **From Display** | (none) | `LifeOS Notifications` |
+| **From Address** | `notifications@royhen.app.n8n.cloud` | `royhenengel@gmail.com` (Gmail SMTP) |
+| **Transport** | n8n built-in | Gmail SMTP with App Password |
 
 #### 2. Enhanced Notification Triggers
 
@@ -226,6 +228,86 @@ Errors are classified into tiers:
 - ADR-001: Complete Notion Integration (original error handling)
 - n8n Workflow: `Bookmark_Processor` (Send Error Email node)
 - Test file: `tests/unit/test_notification_logic.py`
+
+---
+
+## ADR-004: Error Handling Flow Fixes and Resilience
+
+**Date:** January 1, 2026
+
+**Status:** Implemented
+
+### Context
+
+Testing the error notification system revealed several issues in the error handling flow:
+
+1. Error branch bypassed `Normalize Results` node, causing missing `notionPageId`
+2. `Detect URL Type` only accepted camelCase `notionPageId`, not snake_case from webhooks
+3. `Set Error Status` used wrong property name ("Status" instead of "Sync Status")
+4. `Set Error Status` used wrong property type ("status" instead of "select")
+5. Nodes in error chain failed silently without propagating data to subsequent nodes
+6. Email credentials not persisted after workflow updates
+
+### Decision
+
+#### 1. Rewired Error Flow
+
+- Changed `Call Processor` error output to route through `Normalize Results` instead of directly to `Set Error Status`
+- This ensures `notionPageId` and other normalized data is available in error branch
+
+#### 2. Snake Case Support
+
+Updated `Detect URL Type` node to accept both formats:
+```javascript
+notionPageId = body.pageId || body.notionPageId || body.notion_page_id || null;
+```
+
+#### 3. Correct Notion Property
+
+| Setting | Before | After |
+|---------|--------|-------|
+| Property name | `Status` | `Sync Status` |
+| Property type | `status` | `select` |
+
+#### 4. Node Resilience
+
+Made error handling nodes continue on failure to prevent cascade failures:
+
+| Node | onError Setting |
+|------|-----------------|
+| `Set Error Status` | `continueRegularOutput` |
+| `Add Error to Page` | `continueRegularOutput` |
+| `Send Error Email` | `continueRegularOutput` |
+
+#### 5. Stable Data References
+
+Updated error nodes to reference data from `Has Error?` node instead of previous node:
+```javascript
+$('Has Error?').item.json.notionPageId
+$('Has Error?').item.json.url
+$('Has Error?').item.json.error
+```
+
+### Consequences
+
+**Positive:**
+
+- Error handling now completes even if individual steps fail
+- Notion page gets red callout with error message
+- Sync Status correctly set to "Error"
+- Email notifications sent via Gmail SMTP
+- Workflow accepts both camelCase and snake_case input
+
+**Trade-offs:**
+
+- Some error steps may silently fail (logged but not blocking)
+- Email sender shows as user's Gmail (Gmail SMTP limitation)
+
+### Related
+
+- ADR-001: Complete Notion Integration
+- ADR-003: Error Notification Rules
+- n8n Workflow: `Bookmark_Processor` (ID: DJVhLZKH7YIuvGv8)
 
 ---
 
