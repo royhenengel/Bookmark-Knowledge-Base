@@ -1,5 +1,7 @@
 # Bookmarks Knowledge Base - Architecture Decision Records (ADR)
 
+> **Last synced:** January 1, 2026
+
 This document tracks architectural decisions made during the development of the Bookmark Knowledge Base system.
 
 ---
