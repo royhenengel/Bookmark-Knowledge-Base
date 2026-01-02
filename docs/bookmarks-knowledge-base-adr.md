@@ -1,6 +1,6 @@
 # Bookmarks Knowledge Base - Architecture Decision Records (ADR)
 
-> **Last synced:** January 02, 2026 16:56 UTC
+> **Last synced:** January 02, 2026 17:05 UTC
 
 This document tracks architectural decisions made during the development of the Bookmark Knowledge Base system.
 
@@ -310,6 +310,75 @@ $('Has Error?').item.json.error
 - ADR-001: Complete Notion Integration
 - ADR-003: Error Notification Rules
 - n8n Workflow: `Bookmark_Processor` (ID: DJVhLZKH7YIuvGv8)
+
+---
+
+## ADR-005: Batch Interval Fix for Block Append Race Condition
+
+**Date:** January 2, 2026
+
+**Status:** Implemented
+
+### Context
+
+The GitHub to Notion Sync workflow (ID: `5nkD3KqALzJUany3`) was appending page content blocks in incorrect order. Pages would display content starting mid-document (e.g., ADR-004) instead of from the beginning ("Last synced" header).
+
+Investigation of execution #1902 revealed:
+- 144 blocks were split into two batches: Batch 0 (100 blocks) and Batch 1 (44 blocks)
+- Both batches were sent to Notion's `/blocks/{id}/children` API
+- The page showed Batch 1 content first, then Batch 0 content
+
+Root cause: The `Append Blocks` HTTP Request node had `batchInterval: 0`, meaning batches were fired simultaneously without waiting for responses. The smaller Batch 1 (44 blocks) completed before the larger Batch 0 (100 blocks), causing content to appear out of order.
+
+### Decision
+
+Updated the `Append Blocks` node batching configuration:
+
+| Setting | Before | After |
+|---------|--------|-------|
+| `batchSize` | 1 | 1 (unchanged) |
+| `batchInterval` | 0 | 1000 |
+
+The 1-second interval ensures each batch completes before the next one starts, guaranteeing sequential block insertion.
+
+#### Node Configuration (relevant section)
+
+```json
+{
+  "options": {
+    "batching": {
+      "batch": {
+        "batchSize": 1,
+        "batchInterval": 1000
+      }
+    }
+  }
+}
+```
+
+### Consequences
+
+**Positive:**
+
+- Blocks now append in correct document order
+- No more race conditions between batch requests
+- Page content displays from beginning to end as expected
+
+**Trade-offs:**
+
+- Sync takes longer for large documents (1 second per batch)
+- For 144 blocks with batchSize=1, sync takes ~144 seconds vs near-instant
+
+**Future consideration:**
+
+- Could increase `batchSize` to reduce total batches while keeping `batchInterval` for safety
+- Example: `batchSize: 10` with `batchInterval: 500` would process 144 blocks in ~7.5 seconds
+
+### Related
+
+- ADR-001: Complete Notion Integration (original page content flow)
+- Workflow: GitHub to Notion Sync (ID: `5nkD3KqALzJUany3`)
+- Notion API: [Append block children](https://developers.notion.com/reference/patch-block-children)
 
 ---
 
