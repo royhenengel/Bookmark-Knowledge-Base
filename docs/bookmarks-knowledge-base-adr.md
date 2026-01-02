@@ -1,6 +1,4 @@
-# Bookmarks Knowledge Base - Architecture Decision Records (ADR)
-
-> **Last synced:** January 02, 2026 17:05 UTC
+> **Last synced:** January 02, 2026 16:56 UTC
 
 This document tracks architectural decisions made during the development of the Bookmark Knowledge Base system.
 
@@ -17,36 +15,24 @@ This document tracks architectural decisions made during the development of the 
 The Bookmark_Processor n8n workflow was interrupted during initial implementation, leaving gaps in the Notion integration. The workflow could update page properties but was missing:
 
 1. Page body content (AI Analysis, Transcript, Visual Analysis, Code Snippets, Music Recognition)
-2. Sync Status property mapping
-3. Error handling with notifications
+
+1. Sync Status property mapping
+
+1. Error handling with notifications
 
 ### Decision
 
 Complete the implementation by adding:
 
-#### 1. Page Body Content Flow - 6 new nodes
+### 1. Page Body Content Flow – 6 new nodes
 
-| Node | Purpose |
-|------|---------|
-| `Get Page Blocks` | Fetch existing blocks from page |
-| `Prepare Delete Blocks` | Prepare block IDs for deletion (clear before replace) |
-| `Build Page Blocks` | Create Notion block objects for rich content |
-| `Has Page Content?` | Conditional check for content |
-| `Append Page Content` | PATCH /blocks/{id}/children API call |
-| `Skip Page Content` | Pass-through when no content |
+<!-- Table not supported -->
 
-#### 2. Error Handling Branch - 6 new nodes
+### 2. Error Handling Branch – 6 new nodes
 
-| Node | Purpose |
-|------|---------|
-| `Has Error?` | IF node routing errors vs success |
-| `Set Error Status` | Sets Notion "Sync Status" property to "Error" |
-| `Add Error to Page` | Adds red callout block with error details |
-| `Send Error Email` | Emails royhenengel@gmail.com on failures |
-| `Build Error Response` | Formats error JSON |
-| `Respond with Error` | Returns 500 status |
+<!-- Table not supported -->
 
-#### 3. Property Mappings
+### 3. Property Mappings
 
 - Added `Sync Status = "Not Synced"` to Build Notion Payload node
 
@@ -55,25 +41,37 @@ Complete the implementation by adding:
 **Positive:**
 
 - Workflow now has 22 nodes (up from 10)
+
 - Full enrichment data now appears in Notion page body with proper formatting:
-  - AI Analysis (heading + paragraph)
-  - Transcript (heading + paragraph)
-  - Visual Analysis (heading + paragraph)
-  - Code Snippets (heading + code blocks)
-  - Music Recognition (heading + bulleted list)
+
+  – AI Analysis (heading + paragraph)
+
+  – Transcript (heading + paragraph)
+
+  – Visual Analysis (heading + paragraph)
+
+  – Code Snippets (heading + code blocks)
+
+  – Music Recognition (heading + bulleted list)
+
 - Processing failures are now visible in Notion (Sync Status = Error, red callout in page)
+
 - Email notifications alert on failures
-- Sync Status property enables external sync integrations (see [notion-workspace](../../notion-workspace))
+
+- Sync Status property enables external sync integrations (see notion-workspace)
 
 **Trade-offs:**
 
 - Increased workflow complexity (21 vs 10 nodes)
+
 - Additional API calls per bookmark (get blocks, delete blocks, append blocks)
 
 ### Related
 
 - Architecture: `/docs/ARCHITECTURE.md`
+
 - Schema: `/docs/SCHEMA_DESIGN.md`
+
 - n8n Workflow: `Bookmark_Processor`
 
 ---
@@ -88,7 +86,7 @@ Complete the implementation by adding:
 
 The Notion API enforces a **2000 character limit** per `rich_text` content block. When processing video transcripts or long-form content, the `Build Page Blocks` node was generating blocks that exceeded this limit, causing API errors:
 
-```
+```plain text
 body.children[7].toggle.children[0].paragraph.rich_text[0].text.content.length
 should be ≤ 2000, instead was 2360
 ```
@@ -99,7 +97,7 @@ This caused the workflow to fail on videos with longer transcripts (typically 2+
 
 Added text chunking logic to the `Build Page Blocks` node:
 
-#### 1. New `splitText()` Helper Function
+### 1. New `splitText()` Helper Function
 
 ```javascript
 function splitText(text, maxLength = 2000) {
@@ -128,10 +126,12 @@ function splitText(text, maxLength = 2000) {
 }
 ```
 
-#### 2. Updated Block Generation
+### 2. Updated Block Generation
 
 - `parseContentToBlocks()` now splits long paragraphs into multiple paragraph blocks
+
 - `parseMarkdown()` truncates individual rich_text elements to max length
+
 - List items are truncated to prevent overflow
 
 ### Consequences
@@ -139,17 +139,21 @@ function splitText(text, maxLength = 2000) {
 **Positive:**
 
 - Workflow now handles transcripts of any length
+
 - Text splits at word boundaries for readability
-- No data loss - all content is preserved across multiple blocks
+
+- No data loss – all content is preserved across multiple blocks
 
 **Trade-offs:**
 
 - Long transcripts appear as multiple paragraphs within toggles (visually acceptable)
+
 - Slightly more blocks per page for long content
 
 ### Related
 
 - ADR-001: Complete Notion Integration
+
 - Notion API Docs: [Block limits](https://developers.notion.com/reference/request-limits#limits-for-property-values)
 
 ---
@@ -165,247 +169,59 @@ function splitText(text, maxLength = 2000) {
 The error notification system needed refinement:
 
 1. Email was configured to send to a non-existent address (`roy@royengel.com`)
-2. Email sender showed as raw address, not a friendly name
-3. Notification triggers were too narrow - some important failures were not being reported
-4. AI analysis failures were silently ignored
-5. Missing critical content (transcripts, prices, code snippets) went unnoticed
+
+1. Email sender showed as raw address, not a friendly name
+
+1. Notification triggers were too narrow – some important failures were not being reported
+
+1. AI analysis failures were silently ignored
+
+1. Missing critical content (transcripts, prices, code snippets) went unnoticed
 
 ### Decision
 
-#### 1. Email Configuration Updates
+### 1. Email Configuration Updates
 
-| Setting | Before | After |
-|---------|--------|-------|
-| **To** | `roy@royengel.com` | `royhenengel@gmail.com` |
-| **From Display** | (none) | `LifeOS Notifications` |
-| **From Address** | `notifications@royhen.app.n8n.cloud` | `royhenengel@gmail.com` (Gmail SMTP) |
-| **Transport** | n8n built-in | Gmail SMTP with App Password |
+<!-- Table not supported -->
 
-#### 2. Enhanced Notification Triggers
+### 2. Enhanced Notification Triggers
 
 Updated `is_error()` function in `tests/unit/test_notification_logic.py`:
 
-| Trigger | Before | After |
-|---------|--------|-------|
-| HTTP 400/500 | Notify | Notify |
-| Processing errors (timeout, 404, bot block) | Notify | Notify |
-| AI analysis failed | **No notify** | **Notify** |
-| Missing title | Notify | Notify |
-| Unknown content type | Notify | Notify |
-| Transcription failed | Notify | Notify |
-| Video/podcast without transcript | **No notify** | **Notify** |
-| Product without price | **No notify** | **Notify** |
-| Code page without snippets | **No notify** | **Notify** |
-| Other recoverable failures | No notify | No notify |
+<!-- Table not supported -->
 
-#### 3. Error Classification
+### 3. Error Classification
 
 Errors are classified into tiers:
 
-| Tier | HTTP Status | Notification |
-|------|-------------|--------------|
-| **Fatal** | 400/500 | Always |
-| **Processing Error** | 200 + `error` field | Always |
-| **Partial Failure** | 200 + `errors` array | If critical |
-| **Missing Content** | 200 | If content-type specific |
-| **Success** | 200 | Never |
+<!-- Table not supported -->
 
 ### Consequences
 
 **Positive:**
 
 - Notifications now arrive at working email address
+
 - Email clearly shows "LifeOS" as sender
+
 - AI failures are now tracked and reported
+
 - Content-specific failures (no transcript, no price, no code) are caught
+
 - Better visibility into processing quality
 
 **Trade-offs:**
 
 - May generate more notifications initially (expected during tuning)
+
 - Some "false positives" for content that genuinely has no transcript/price/code
 
 ### Related
 
 - ADR-001: Complete Notion Integration (original error handling)
+
 - n8n Workflow: `Bookmark_Processor` (Send Error Email node)
+
 - Test file: `tests/unit/test_notification_logic.py`
 
 ---
-
-## ADR-004: Error Handling Flow Fixes and Resilience
-
-**Date:** January 1, 2026
-
-**Status:** Implemented
-
-### Context
-
-Testing the error notification system revealed several issues in the error handling flow:
-
-1. Error branch bypassed `Normalize Results` node, causing missing `notionPageId`
-2. `Detect URL Type` only accepted camelCase `notionPageId`, not snake_case from webhooks
-3. `Set Error Status` used wrong property name ("Status" instead of "Sync Status")
-4. `Set Error Status` used wrong property type ("status" instead of "select")
-5. Nodes in error chain failed silently without propagating data to subsequent nodes
-6. Email credentials not persisted after workflow updates
-
-### Decision
-
-#### 1. Rewired Error Flow
-
-- Changed `Call Processor` error output to route through `Normalize Results` instead of directly to `Set Error Status`
-- This ensures `notionPageId` and other normalized data is available in error branch
-
-#### 2. Snake Case Support
-
-Updated `Detect URL Type` node to accept both formats:
-```javascript
-notionPageId = body.pageId || body.notionPageId || body.notion_page_id || null;
-```
-
-#### 3. Correct Notion Property
-
-| Setting | Before | After |
-|---------|--------|-------|
-| Property name | `Status` | `Sync Status` |
-| Property type | `status` | `select` |
-
-#### 4. Node Resilience
-
-Made error handling nodes continue on failure to prevent cascade failures:
-
-| Node | onError Setting |
-|------|-----------------|
-| `Set Error Status` | `continueRegularOutput` |
-| `Add Error to Page` | `continueRegularOutput` |
-| `Send Error Email` | `continueRegularOutput` |
-
-#### 5. Stable Data References
-
-Updated error nodes to reference data from `Has Error?` node instead of previous node:
-```javascript
-$('Has Error?').item.json.notionPageId
-$('Has Error?').item.json.url
-$('Has Error?').item.json.error
-```
-
-### Consequences
-
-**Positive:**
-
-- Error handling now completes even if individual steps fail
-- Notion page gets red callout with error message
-- Sync Status correctly set to "Error"
-- Email notifications sent via Gmail SMTP
-- Workflow accepts both camelCase and snake_case input
-
-**Trade-offs:**
-
-- Some error steps may silently fail (logged but not blocking)
-- Email sender shows as user's Gmail (Gmail SMTP limitation)
-
-### Related
-
-- ADR-001: Complete Notion Integration
-- ADR-003: Error Notification Rules
-- n8n Workflow: `Bookmark_Processor` (ID: DJVhLZKH7YIuvGv8)
-
----
-
-## ADR-005: Batch Interval Fix for Block Append Race Condition
-
-**Date:** January 2, 2026
-
-**Status:** Implemented
-
-### Context
-
-The GitHub to Notion Sync workflow (ID: `5nkD3KqALzJUany3`) was appending page content blocks in incorrect order. Pages would display content starting mid-document (e.g., ADR-004) instead of from the beginning ("Last synced" header).
-
-Investigation of execution #1902 revealed:
-- 144 blocks were split into two batches: Batch 0 (100 blocks) and Batch 1 (44 blocks)
-- Both batches were sent to Notion's `/blocks/{id}/children` API
-- The page showed Batch 1 content first, then Batch 0 content
-
-Root cause: The `Append Blocks` HTTP Request node had `batchInterval: 0`, meaning batches were fired simultaneously without waiting for responses. The smaller Batch 1 (44 blocks) completed before the larger Batch 0 (100 blocks), causing content to appear out of order.
-
-### Decision
-
-Updated the `Append Blocks` node batching configuration:
-
-| Setting | Before | After |
-|---------|--------|-------|
-| `batchSize` | 1 | 1 (unchanged) |
-| `batchInterval` | 0 | 1000 |
-
-The 1-second interval ensures each batch completes before the next one starts, guaranteeing sequential block insertion.
-
-#### Node Configuration (relevant section)
-
-```json
-{
-  "options": {
-    "batching": {
-      "batch": {
-        "batchSize": 1,
-        "batchInterval": 1000
-      }
-    }
-  }
-}
-```
-
-### Consequences
-
-**Positive:**
-
-- Blocks now append in correct document order
-- No more race conditions between batch requests
-- Page content displays from beginning to end as expected
-
-**Trade-offs:**
-
-- Sync takes longer for large documents (1 second per batch)
-- For 144 blocks with batchSize=1, sync takes ~144 seconds vs near-instant
-
-**Future consideration:**
-
-- Could increase `batchSize` to reduce total batches while keeping `batchInterval` for safety
-- Example: `batchSize: 10` with `batchInterval: 500` would process 144 blocks in ~7.5 seconds
-
-### Related
-
-- ADR-001: Complete Notion Integration (original page content flow)
-- Workflow: GitHub to Notion Sync (ID: `5nkD3KqALzJUany3`)
-- Notion API: [Append block children](https://developers.notion.com/reference/patch-block-children)
-
----
-
-## ADR Template
-
-Use this template for future ADRs:
-
-```markdown
-## ADR-XXX: [Title]
-
-**Date:** [Date]
-
-**Status:** [Proposed | Accepted | Deprecated | Superseded]
-
-### Context
-
-[What is the issue that we're seeing that is motivating this decision or change?]
-
-### Decision
-
-[What is the change that we're proposing and/or doing?]
-
-### Consequences
-
-[What becomes easier or more difficult to do because of this change?]
-
-### Related
-
-[Links to related documents, code, or other ADRs]
-```
