@@ -215,3 +215,13 @@ Errors are classified into tiers:
 - Test file: `tests/unit/test_notification_logic.py`
 
 ---
+
+> **Last synced:** January 02, 2026 16:56 UTC
+
+This document tracks architectural decisions made during the development of the Bookmark Knowledge Base system.
+
+---
+
+## ADR-001: Complete Notion Integration with Page Body Content and Error Handling
+
+**Date:** December 27, 2025
